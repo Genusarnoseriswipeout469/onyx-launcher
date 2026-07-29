@@ -1,0 +1,1727 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const http = require("node:http");
+const fs = require("node:fs");
+const zlib = require("node:zlib");
+const { pipeline } = require("node:stream/promises");
+const tar = require("tar-stream");
+const fsp = require("node:fs/promises");
+const path = require("node:path");
+const crypto = require("node:crypto");
+const { ZipArchive } = require("archiver");
+const {
+  applyRules,
+  mavenArtifact,
+  expandArguments,
+  parseServerAddress,
+  normalizeResolvedVersionId,
+} = require("../electron/services/minecraft.cjs");
+const {
+  safeDestination,
+  readZipJson,
+  extractZip,
+  extractTarGz,
+} = require("../electron/services/archive.cjs");
+const {
+  minecraftOsName,
+  adoptiumOsName,
+  javaExecutableNames,
+  javaConsoleExecutable,
+  defaultDataRoot,
+} = require("../electron/services/platform.cjs");
+const {
+  downloadFile,
+  fileMatches,
+  readJsonResponse,
+} = require("../electron/services/network.cjs");
+const {
+  comparePackIndexes,
+  profileFromDependencies,
+  selectPackRelease,
+} = require("../electron/services/modpack.cjs");
+const {
+  MinecraftService,
+} = require("../electron/services/minecraft.cjs");
+const {
+  JavaService,
+  inspectJava,
+  findSystemJava,
+} = require("../electron/services/java.cjs");
+const {
+  safeChild,
+  createInstanceBackup,
+  importInstanceBackup,
+} = require("../electron/services/maintenance.cjs");
+const {
+  listModHistory,
+  rollbackModUpdate,
+  selectVersionFile,
+  safeModrinthDownload,
+} = require("../electron/services/content.cjs");
+const {
+  analyzeMinecraftLog,
+} = require("../electron/services/log-analysis.cjs");
+const {
+  checkInstanceHealth,
+  requiredJavaForMinecraft,
+  reportStatus,
+} = require("../electron/services/preflight.cjs");
+const {
+  PICK_DEFINITIONS,
+} = require("../electron/services/picks.cjs");
+const {
+  disableSuspectMods,
+  readModBaseline,
+  recentModChanges,
+  snapshotMods,
+  writeModBaseline,
+} = require("../electron/services/guard.cjs");
+const {
+  startBisect,
+  reportBisectResult,
+  finishBisect,
+  readBisectSession,
+} = require("../electron/services/bisect.cjs");
+const {
+  applyModProfile,
+  deleteModProfile,
+  listModProfiles,
+  saveModProfile,
+} = require("../electron/services/mod-profiles.cjs");
+const {
+  createWorldSnapshot,
+  listWorldSnapshots,
+  restoreWorldSnapshot,
+} = require("../electron/services/world-guard.cjs");
+const {
+  createSyncProfile,
+  validateSyncProfile,
+} = require("../electron/services/sync.cjs");
+const {
+  parseCpuTime,
+  downsampleTimeline,
+  buildInsights,
+  buildRegressionInsights,
+  FlightRecorder,
+} = require("../electron/services/flight-recorder.cjs");
+const {
+  detectFpsRecorder,
+  parseFpsCsv,
+  buildFpsInsights,
+} = require("../electron/services/fps-recorder.cjs");
+const {
+  createSupportBundle,
+  sanitizeSupportText,
+} = require("../electron/services/support-bundle.cjs");
+const {
+  analyzeInstanceStorage,
+  cleanupInstanceStorage,
+} = require("../electron/services/instance-storage.cjs");
+const {
+  recommendInstanceResources,
+} = require("../electron/services/tuning.cjs");
+const {
+  decodeVarInt,
+  encodeString,
+  encodeVarInt,
+  motdToText,
+  parseStatusResponse,
+  resolveMinecraftEndpoint,
+} = require("../electron/services/server-status.cjs");
+const {
+  parseTomlModIds,
+  scanInstanceMods,
+} = require("../electron/services/mod-metadata.cjs");
+const {
+  AuthService,
+  CLIENT_ID,
+  DEFAULT_CLIENT_ID,
+  DEVICE_CODE_ENDPOINT,
+  TOKEN_ENDPOINT,
+  SCOPE,
+  MC_LOGIN,
+} = require("../electron/services/auth.cjs");
+
+const temporaryRoot = path.resolve(__dirname, ".tmp");
+
+async function writeTestJar(filePath, entries) {
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
+  await new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(filePath);
+    const zip = new ZipArchive({ zlib: { level: 1 } });
+    output.once("close", resolve);
+    output.once("error", reject);
+    zip.once("error", reject);
+    zip.pipe(output);
+    for (const [name, content] of Object.entries(entries)) {
+      zip.append(content, { name });
+    }
+    void zip.finalize();
+  });
+}
+
+test.before(async () => {
+  assert.ok(temporaryRoot.startsWith(path.resolve(__dirname)));
+  await fsp.rm(temporaryRoot, { recursive: true, force: true });
+  await fsp.mkdir(temporaryRoot, { recursive: true });
+});
+
+test.after(async () => {
+  assert.ok(temporaryRoot.startsWith(path.resolve(__dirname)));
+  await fsp.rm(temporaryRoot, { recursive: true, force: true });
+});
+
+test("Maven-координаты преобразуются в официальный путь библиотеки", () => {
+  const artifact = mavenArtifact(
+    "org.example:demo:1.2.3:natives-windows",
+    "https://repo.example/",
+  );
+  assert.equal(
+    artifact.path,
+    "org/example/demo/1.2.3/demo-1.2.3-natives-windows.jar",
+  );
+  assert.equal(
+    artifact.url,
+    "https://repo.example/org/example/demo/1.2.3/demo-1.2.3-natives-windows.jar",
+  );
+});
+
+test("Правила Mojang учитывают ОС, архитектуру и флаги запуска", () => {
+  const windows = { platform: "win32", arch: "x64", version: "10.0" };
+  const linux = { platform: "linux", arch: "x64", version: "6.12" };
+  assert.equal(
+    applyRules([{ action: "allow", os: { name: "windows" } }], {}, windows),
+    true,
+  );
+  assert.equal(
+    applyRules([{ action: "allow", os: { name: "windows" } }], {}, linux),
+    false,
+  );
+  assert.equal(
+    applyRules([{ action: "allow", os: { name: "linux" } }], {}, linux),
+    true,
+  );
+  assert.equal(
+    applyRules([{ action: "allow", os: { arch: "x86_64" } }], {}, linux),
+    true,
+  );
+  assert.deepEqual(
+    expandArguments(
+      [
+        "--always",
+        {
+          rules: [{ action: "allow", features: { is_demo_user: true } }],
+          value: ["--demo", "true"],
+        },
+      ],
+      { is_demo_user: true },
+    ),
+    ["--always", "--demo", "true"],
+  );
+});
+
+test("Профиль Modrinth выбирает загрузчик и версию Minecraft", () => {
+  assert.deepEqual(
+    profileFromDependencies({
+      minecraft: "1.21.1",
+      "fabric-loader": "0.16.14",
+    }),
+    {
+      minecraftVersion: "1.21.1",
+      loader: "fabric",
+      loaderVersion: "0.16.14",
+    },
+  );
+  assert.equal(
+    selectPackRelease([
+      { id: "beta", version_type: "beta", files: [{ filename: "a.mrpack" }] },
+      {
+        id: "release",
+        version_type: "release",
+        files: [{ filename: "b.mrpack" }],
+      },
+    ]).id,
+    "release",
+  );
+});
+
+test("Распаковщик не выпускает файлы за пределы инстанса", () => {
+  const root = path.join(temporaryRoot, "instance");
+  assert.equal(
+    safeDestination(root, "mods/example.jar"),
+    path.join(root, "mods", "example.jar"),
+  );
+  assert.throws(() => safeDestination(root, "../../outside.txt"));
+  assert.throws(() => safeChild(root, "../outside"));
+});
+test("Платформенный слой выбирает корректные имена и каталоги", () => {
+  assert.equal(minecraftOsName("win32"), "windows");
+  assert.equal(minecraftOsName("linux"), "linux");
+  assert.equal(minecraftOsName("darwin"), "osx");
+  assert.equal(adoptiumOsName("darwin"), "mac");
+  assert.deepEqual(javaExecutableNames("win32"), ["javaw.exe", "java.exe"]);
+  assert.deepEqual(javaExecutableNames("linux"), ["java"]);
+  assert.equal(javaConsoleExecutable("/opt/jdk/bin/java", "linux"), "/opt/jdk/bin/java");
+  assert.equal(javaConsoleExecutable("C:\\jdk\\bin\\javaw.exe", "win32"), "C:\\jdk\\bin\\java.exe");
+  assert.equal(
+    defaultDataRoot({
+      platform: "linux",
+      env: { XDG_DATA_HOME: "/var/data" },
+      home: "/home/player",
+      appData: "/unused",
+    }),
+    path.join("/var/data", "onyx-launcher"),
+  );
+});
+
+test("Java runtime распаковывается из Linux tar.gz", async () => {
+  const archivePath = path.join(temporaryRoot, "runtime.tar.gz");
+  const destination = path.join(temporaryRoot, "runtime");
+  const pack = tar.pack();
+  const writing = pipeline(
+    pack,
+    zlib.createGzip(),
+    fs.createWriteStream(archivePath),
+  );
+  pack.entry(
+    { name: "jdk/bin/java", mode: 0o755 },
+    Buffer.from("linux-java"),
+  );
+  pack.finalize();
+  await writing;
+  await extractTarGz(archivePath, destination);
+  assert.equal(
+    await fsp.readFile(path.join(destination, "jdk", "bin", "java"), "utf8"),
+    "linux-java",
+  );
+});
+
+test("Некорректный ответ авторизации даёт понятную ошибку вместо SyntaxError", async () => {
+  const endpoint = "https://login.live.com/oauth20_token.srf";
+  await assert.rejects(
+    readJsonResponse(
+      new Response("<!doctype html><title>Gateway</title>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+      endpoint,
+    ),
+    /login\.live\.com вернул неожиданный ответ вместо JSON \(502, text\/html\)/,
+  );
+  assert.deepEqual(
+    await readJsonResponse(
+      new Response('{"access_token":"example"}', {
+        headers: { "content-type": "application/json" },
+      }),
+      endpoint,
+    ),
+    { access_token: "example" },
+  );
+  assert.deepEqual(
+    await readJsonResponse(
+      new Response(null, {
+        status: 401,
+      }),
+      "https://user.auth.xboxlive.com/user/authenticate",
+    ),
+    {},
+  );
+});
+
+test("Microsoft OAuth использует актуальный consumer flow Prism", () => {
+  assert.equal(
+    DEFAULT_CLIENT_ID,
+    "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb",
+  );
+  assert.equal(
+    CLIENT_ID,
+    (process.env.ONYX_MICROSOFT_CLIENT_ID || DEFAULT_CLIENT_ID).trim(),
+  );
+  assert.equal(
+    DEVICE_CODE_ENDPOINT,
+    "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode",
+  );
+  assert.equal(
+    TOKEN_ENDPOINT,
+    "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+  );
+  assert.equal(SCOPE, "XboxLive.SignIn XboxLive.offline_access");
+  assert.equal(MC_LOGIN, "https://api.minecraftservices.com/launcher/login");
+
+  const service = new AuthService(temporaryRoot);
+  assert.deepEqual(service.minecraftLoginPayload("user-hash", "xsts-token"), {
+    xtoken: "XBL3.0 x=user-hash;xsts-token",
+    platform: "PC_LAUNCHER",
+  });
+});
+
+test("Без системного keyring refresh-токен остаётся только в памяти", async () => {
+  const authRoot = path.join(temporaryRoot, "volatile-auth");
+  const service = new AuthService(authRoot);
+  if (service.encryptionAvailable()) return;
+  await service.saveAccount({
+    profile: { uuid: "volatile-user", name: "Player", kind: "microsoft" },
+    refreshToken: "must-not-reach-disk",
+    oauthClientId: CLIENT_ID,
+    signedInAt: new Date().toISOString(),
+  });
+  const accounts = await service.listAccounts();
+  assert.equal(accounts.storage.persistent, false);
+  assert.equal(accounts.profiles[0].uuid, "volatile-user");
+  await assert.rejects(fsp.stat(path.join(authRoot, "account.json")));
+});
+
+test("Refresh-токены от другого OAuth-клиента требуют повторного входа", async () => {
+  const service = new AuthService(temporaryRoot);
+  assert.equal(service.sameClientId(CLIENT_ID.toUpperCase(), CLIENT_ID), true);
+  assert.equal(service.sameClientId("00000000402b5328", CLIENT_ID), false);
+  assert.equal(service.sameClientId(null, CLIENT_ID), false);
+
+  service.loadAccount = async () => ({
+    profile: { uuid: "legacy-account" },
+    refreshToken: "legacy-refresh-token",
+    oauthClientId: null,
+  });
+  await assert.rejects(
+    service.getLaunchAccount(),
+    /Аккаунт сохранён старой схемой Microsoft OAuth/,
+  );
+});
+
+test("Выбор файла обновления исключает dev-артефакты и чужие CDN", () => {
+  const file = selectVersionFile({
+    files: [
+      {
+        filename: "example-sources.jar",
+        primary: true,
+        url: "https://cdn.modrinth.com/sources.jar",
+      },
+      {
+        filename: "example.jar",
+        primary: false,
+        url: "https://cdn.modrinth.com/example.jar",
+      },
+    ],
+  });
+  assert.equal(file.filename, "example.jar");
+  assert.equal(
+    safeModrinthDownload("https://cdn.modrinth.com/data/project/file.jar"),
+    "https://cdn.modrinth.com/data/project/file.jar",
+  );
+  assert.throws(() =>
+    safeModrinthDownload("https://example.invalid/payload.jar"),
+  );
+});
+
+test("Анализ журнала превращает типовые падения в понятные действия", () => {
+  const diagnoses = analyzeMinecraftLog(`
+    java.lang.OutOfMemoryError: Java heap space
+    org.spongepowered.asm.mixin.transformer.throwables.MixinApplyError
+  `);
+  assert.deepEqual(
+    diagnoses.map((item) => item.code),
+    ["out-of-memory", "mixin-conflict"],
+  );
+  assert.deepEqual(
+    analyzeMinecraftLog(`
+      java.util.zip.ZipException: zip END header not found
+      Unrecognized VM option 'UseConcMarkSweepGC'
+      GLFW error 65542: WGL: The driver does not appear to support OpenGL
+      java.nio.file.AccessDeniedException: /games/instance/options.txt
+    `).map((item) => item.code),
+    [
+      "corrupted-file",
+      "bad-jvm-arguments",
+      "graphics-init",
+      "permission-denied",
+    ],
+  );
+  assert.equal(analyzeMinecraftLog("Game started normally").length, 0);
+});
+
+test("История модов откатывает обновление и сохраняет текущий файл", async () => {
+  const instancesRoot = path.join(temporaryRoot, "history-instances");
+  const instanceId = "history-instance";
+  const instanceRoot = path.join(instancesRoot, instanceId);
+  const modsRoot = path.join(instanceRoot, "mods");
+  const historyRoot = path.join(
+    instanceRoot,
+    ".onyx",
+    "history",
+    "mods",
+  );
+  const transactionsRoot = path.join(historyRoot, "transactions");
+  const transactionId = "2026-07-29T12-00-00-000Z-test";
+  await fsp.mkdir(modsRoot, { recursive: true });
+  await fsp.mkdir(transactionsRoot, { recursive: true });
+  await fsp.writeFile(path.join(modsRoot, "demo-new.jar"), "new");
+  await fsp.writeFile(path.join(historyRoot, "demo-old.jar"), "old");
+  await fsp.writeFile(
+    path.join(transactionsRoot, `${transactionId}.json`),
+    JSON.stringify({
+      schema: 1,
+      kind: "mod-update",
+      id: transactionId,
+      createdAt: "2026-07-29T12:00:00.000Z",
+      previousName: "demo-old.jar",
+      currentName: "demo-new.jar",
+      backupName: "demo-old.jar",
+      replacedBackupName: null,
+      versionNumber: "2.0.0",
+      rolledBackAt: null,
+    }),
+  );
+
+  const before = await listModHistory({ instancesRoot, instanceId });
+  assert.equal(before.length, 1);
+  assert.equal(before[0].versionNumber, "2.0.0");
+
+  const result = await rollbackModUpdate({
+    instancesRoot,
+    instanceId,
+    transactionId,
+  });
+  assert.equal(result.restored, true);
+  assert.equal(
+    await fsp.readFile(path.join(modsRoot, "demo-old.jar"), "utf8"),
+    "old",
+  );
+  assert.equal(
+    await fsp.stat(path.join(modsRoot, "demo-new.jar")).catch(() => null),
+    null,
+  );
+  const historyFiles = await fsp.readdir(historyRoot);
+  assert.ok(
+    historyFiles.some((name) => name.endsWith("-rollback-demo-new.jar")),
+  );
+  const after = await listModHistory({ instancesRoot, instanceId });
+  assert.ok(after[0].rolledBackAt);
+  await assert.rejects(() =>
+    rollbackModUpdate({ instancesRoot, instanceId, transactionId }),
+  );
+});
+
+test("Guard находит моды после последнего удачного запуска и отключает их", async () => {
+  const instancesRoot = path.join(temporaryRoot, "guard-instances");
+  const instanceId = "guard-instance";
+  const instanceRoot = path.join(instancesRoot, instanceId);
+  const modsRoot = path.join(instanceRoot, "mods");
+  await fsp.mkdir(modsRoot, { recursive: true });
+  await fsp.writeFile(path.join(modsRoot, "stable.jar"), "stable");
+  const first = await snapshotMods(instanceRoot);
+  await writeModBaseline(instanceRoot, first);
+  const baseline = await readModBaseline(instanceRoot);
+  assert.equal(baseline.mods.length, 1);
+
+  await fsp.writeFile(path.join(modsRoot, "new-renderer.jar"), "new");
+  const second = await snapshotMods(instanceRoot);
+  assert.deepEqual(recentModChanges(baseline, second), [
+    "new-renderer.jar",
+  ]);
+
+  const disabled = await disableSuspectMods({
+    instancesRoot,
+    instanceId,
+    names: ["new-renderer.jar"],
+  });
+  assert.deepEqual(disabled.disabled, ["new-renderer.jar"]);
+  assert.equal(
+    await fsp.readFile(
+      path.join(modsRoot, "new-renderer.jar.disabled"),
+      "utf8",
+    ),
+    "new",
+  );
+  await assert.rejects(() =>
+    disableSuspectMods({
+      instancesRoot,
+      instanceId,
+      names: ["../outside.jar"],
+    }),
+  );
+});
+
+test("AutoTune учитывает количество модов и не забирает всю память", () => {
+  assert.equal(requiredJavaForMinecraft("1.16.5"), 8);
+  assert.equal(requiredJavaForMinecraft("1.20.1"), 17);
+  assert.equal(requiredJavaForMinecraft("1.20.4"), 17);
+  assert.equal(requiredJavaForMinecraft("1.20.5"), 21);
+  assert.equal(requiredJavaForMinecraft("26.1"), 21);
+  const heavy = recommendInstanceResources({
+    instance: {
+      version: "1.21.1",
+      loader: "Fabric 0.16",
+      modCount: 180,
+    },
+    totalMemory: 16 * 1024 ** 3,
+  });
+  assert.equal(heavy.memoryGiB, 8);
+  assert.equal(heavy.javaMajor, 21);
+  assert.equal(heavy.safeMaximumGiB, 13);
+  const constrained = recommendInstanceResources({
+    instance: {
+      version: "1.20.1",
+      loader: "Forge",
+      modCount: 260,
+    },
+    totalMemory: 8 * 1024 ** 3,
+  });
+  assert.equal(constrained.memoryGiB, 4);
+  assert.equal(constrained.javaMajor, 17);
+  assert.ok(constrained.memoryGiB <= constrained.safeMaximumGiB);
+});
+
+test("Резервная копия Onyx переносит миры, настройки и метаданные", async () => {
+  const sourceRoot = path.join(temporaryRoot, "backup-source");
+  const restoreRoot = path.join(temporaryRoot, "backup-restore");
+  const sourceDirectory = path.join(sourceRoot, "test-instance");
+  await fsp.mkdir(path.join(sourceDirectory, "worlds", "My World"), {
+    recursive: true,
+  });
+  await fsp.mkdir(path.join(sourceDirectory, "mods"), { recursive: true });
+  await fsp.writeFile(
+    path.join(sourceDirectory, "worlds", "My World", "level.dat"),
+    "world-data",
+  );
+  await fsp.writeFile(
+    path.join(sourceDirectory, "mods", "example.jar"),
+    "mod-data",
+  );
+  const archivePath = path.join(temporaryRoot, "test-backup.onyxpack");
+  const backup = await createInstanceBackup({
+    instance: {
+      id: "test-instance",
+      name: "Тестовый мир",
+      version: "1.21.1",
+      loader: "Fabric",
+      description: "Проверка",
+      color: "cyan",
+      glyph: "ТМ",
+      installProfile: {
+        minecraftVersion: "1.21.1",
+        loader: "fabric",
+      },
+    },
+    instancesRoot: sourceRoot,
+    destination: archivePath,
+  });
+  assert.ok(backup.bytes > 0);
+  assert.equal(backup.files, 2);
+
+  const imported = await importInstanceBackup({
+    backupPath: archivePath,
+    instancesRoot: restoreRoot,
+    instanceId: "restored-instance",
+  });
+  assert.equal(imported.name, "Тестовый мир");
+  assert.equal(imported.status, "setup");
+  assert.equal(
+    await fsp.readFile(
+      path.join(
+        restoreRoot,
+        "restored-instance",
+        "worlds",
+        "My World",
+        "level.dat",
+      ),
+      "utf8",
+    ),
+    "world-data",
+  );
+});
+
+test(
+  "Загрузчик проверяет SHA-256 и повторно использует валидный файл",
+  { timeout: 15_000 },
+  async () => {
+    const payload = Buffer.from("onyx-download-integrity");
+    const checksum = crypto.createHash("sha256").update(payload).digest("hex");
+    const server = http.createServer((_request, response) => {
+      response.setHeader("Content-Length", payload.length);
+      response.end(payload);
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      const destination = path.join(temporaryRoot, "download", "asset.bin");
+      const first = await downloadFile({
+        url: `http://127.0.0.1:${address.port}/asset`,
+        destination,
+        sha256: checksum,
+        size: payload.length,
+      });
+      assert.equal(first.cached, false);
+      assert.equal(
+        await fileMatches(destination, {
+          sha256: checksum,
+          size: payload.length,
+        }),
+        true,
+      );
+      const second = await downloadFile({
+        url: `http://127.0.0.1:${address.port}/asset`,
+        destination,
+        sha256: checksum,
+        size: payload.length,
+      });
+      assert.equal(second.cached, true);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);
+
+test(
+  "Отмена загрузки останавливает поток и удаляет временный файл",
+  { timeout: 15_000 },
+  async () => {
+    const chunk = Buffer.alloc(64 * 1024, 7);
+    const server = http.createServer((_request, response) => {
+      response.setHeader("Content-Length", chunk.length * 64);
+      let sent = 0;
+      const timer = setInterval(() => {
+        if (sent >= 64 || response.destroyed) {
+          clearInterval(timer);
+          response.end();
+          return;
+        }
+        response.write(chunk);
+        sent += 1;
+      }, 10);
+      response.on("close", () => clearInterval(timer));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      const destination = path.join(temporaryRoot, "cancel", "large.bin");
+      const controller = new AbortController();
+      await assert.rejects(
+        downloadFile({
+          url: `http://127.0.0.1:${address.port}/large`,
+          destination,
+          signal: controller.signal,
+          onProgress: ({ received }) => {
+            if (received > 0) controller.abort();
+          },
+        }),
+        (error) => error.name === "AbortError",
+      );
+      await assert.rejects(fsp.stat(destination));
+      await assert.rejects(fsp.stat(`${destination}.part`));
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);
+
+test(
+  "Загрузчик продолжает проверенный файл с сохранённой позиции",
+  { timeout: 15_000 },
+  async () => {
+    const payload = Buffer.from(
+      "onyx-resumable-download-payload-with-enough-bytes",
+    );
+    const checksum = crypto.createHash("sha256").update(payload).digest("hex");
+    const partialSize = 17;
+    let requestedRange = "";
+    const server = http.createServer((request, response) => {
+      requestedRange = request.headers.range || "";
+      const offset = Number(
+        /^bytes=(\d+)-$/.exec(requestedRange)?.[1] || 0,
+      );
+      response.statusCode = offset ? 206 : 200;
+      response.setHeader("Accept-Ranges", "bytes");
+      response.setHeader(
+        "Content-Range",
+        `bytes ${offset}-${payload.length - 1}/${payload.length}`,
+      );
+      response.setHeader("Content-Length", payload.length - offset);
+      response.end(payload.subarray(offset));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      const destination = path.join(
+        temporaryRoot,
+        "resume",
+        "asset.bin",
+      );
+      await fsp.mkdir(path.dirname(destination), { recursive: true });
+      await fsp.writeFile(
+        `${destination}.part`,
+        payload.subarray(0, partialSize),
+      );
+      const result = await downloadFile({
+        url: `http://127.0.0.1:${address.port}/asset`,
+        destination,
+        sha256: checksum,
+        size: payload.length,
+      });
+      assert.equal(requestedRange, `bytes=${partialSize}-`);
+      assert.equal(result.resumed, true);
+      assert.deepEqual(await fsp.readFile(destination), payload);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);
+
+test(
+  "Закрытие лаунчера сохраняет частично загруженный проверенный файл",
+  { timeout: 15_000 },
+  async () => {
+    const chunk = Buffer.alloc(32 * 1024, 4);
+    const server = http.createServer((_request, response) => {
+      response.setHeader("Content-Length", chunk.length * 32);
+      const timer = setInterval(() => response.write(chunk), 8);
+      response.on("close", () => clearInterval(timer));
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      const destination = path.join(
+        temporaryRoot,
+        "preserve",
+        "large.bin",
+      );
+      const controller = new AbortController();
+      let abortScheduled = false;
+      await assert.rejects(
+        downloadFile({
+          url: `http://127.0.0.1:${address.port}/large`,
+          destination,
+          sha256: "0".repeat(64),
+          signal: controller.signal,
+          onProgress: ({ received }) => {
+            if (received >= chunk.length * 2 && !abortScheduled) {
+              abortScheduled = true;
+              setTimeout(
+                () => controller.abort({ preservePartial: true }),
+                15,
+              );
+            }
+          },
+        }),
+        (error) => error.name === "AbortError",
+      );
+      const partial = await fsp.stat(`${destination}.part`);
+      assert.ok(partial.size > 0);
+      await assert.rejects(fsp.stat(destination));
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);
+
+test(
+  "Официальные метаданные Mojang и Fabric разбираются",
+  { timeout: 45_000 },
+  async () => {
+    const javaService = new JavaService(path.join(temporaryRoot, "runtimes"));
+    const service = new MinecraftService({
+      sharedRoot: path.join(temporaryRoot, "shared"),
+      instancesRoot: path.join(temporaryRoot, "instances"),
+      javaService,
+    });
+    const versions = await service.listVersions(false);
+    assert.ok(versions.length > 10);
+    assert.ok(versions.every((version) => version.type === "release"));
+    const vanilla = await service.getVanillaVersion("1.21.1");
+    assert.equal(vanilla.id, "1.21.1");
+    assert.ok(vanilla.downloads.client.url.startsWith("https://"));
+    const fabricId = await service.installFabric({
+      minecraftVersion: "1.21.1",
+      loader: "fabric",
+      loaderVersion: null,
+    });
+    assert.match(fabricId, /fabric-loader/);
+    const profilePath = path.join(
+      temporaryRoot,
+      "shared",
+      "versions",
+      fabricId,
+      `${fabricId}.json`,
+    );
+    const profile = JSON.parse(await fsp.readFile(profilePath, "utf8"));
+    assert.equal(profile.inheritsFrom, "1.21.1");
+  },
+);
+
+test("Установленная Java определяется и сообщает мажорную версию", async (context) => {
+  const java = await findSystemJava();
+  if (!java) {
+    context.skip("Java отсутствует в PATH тестовой системы");
+    return;
+  }
+  assert.ok(java.major >= 17);
+  assert.ok(await inspectJava(java.executable));
+});
+
+test("Запуск повторно проверяет сохранённый путь Java", async () => {
+  const calls = [];
+  const service = new MinecraftService({
+    sharedRoot: path.join(temporaryRoot, "java-selection-shared"),
+    instancesRoot: path.join(temporaryRoot, "java-selection-instances"),
+    javaService: {
+      async resolve(requiredMajor, preferredPath) {
+        calls.push({ requiredMajor, preferredPath });
+        return "/opt/onyx/java-21/bin/java";
+      },
+    },
+  });
+  const resolved = await service.resolveJavaForLaunch(
+    21,
+    { javaPath: "" },
+    { javaPath: "/old/windows/runtime/bin/java.exe" },
+  );
+  assert.equal(resolved, "/opt/onyx/java-21/bin/java");
+  assert.deepEqual(calls, [
+    {
+      requiredMajor: 21,
+      preferredPath: "/old/windows/runtime/bin/java.exe",
+    },
+  ]);
+});
+
+test("Повторный запуск Vanilla сохраняет resolvedVersionId и не требует переустановки", async () => {
+  const service = new MinecraftService({
+    sharedRoot: path.join(temporaryRoot, "vanilla-reuse-shared"),
+    instancesRoot: path.join(temporaryRoot, "vanilla-reuse-instances"),
+    javaService: {
+      async resolve() {
+        return "/opt/onyx/java-21/bin/java";
+      },
+    },
+  });
+  service.installVanilla = async () => ({
+    javaVersion: { majorVersion: 21 },
+  });
+  service.installLoader = async () => "1.21.1";
+  const installed = await service.installInstance(
+    {
+      id: "plain-1-21-1",
+      version: "1.21.1",
+      loader: "Vanilla",
+    },
+    { javaPath: "" },
+  );
+  assert.equal(installed.resolvedVersionId, "1.21.1");
+  assert.equal(installed.versionId, undefined);
+
+  const legacy = { versionId: "1.21.1", status: "setup" };
+  normalizeResolvedVersionId(legacy);
+  assert.equal(legacy.resolvedVersionId, "1.21.1");
+  assert.equal(legacy.versionId, undefined);
+  assert.equal(legacy.status, "ready");
+});
+
+test("Preflight блокирует только опасные условия и помечает ремонт", () => {
+  assert.equal(
+    reportStatus(
+      [{ code: "disk-critical", status: "error" }],
+      { requiresInstall: false, repairNeeded: false },
+    ),
+    "blocked",
+  );
+  assert.equal(
+    reportStatus(
+      [{ code: "client-jar-missing", status: "error" }],
+      { requiresInstall: false, repairNeeded: true },
+    ),
+    "repair",
+  );
+  assert.equal(
+    reportStatus(
+      [{ code: "java-stale", status: "warning" }],
+      { requiresInstall: false, repairNeeded: false },
+    ),
+    "warning",
+  );
+});
+
+test("Preflight распознаёт устаревший путь Java без блокировки запуска", async () => {
+  const root = path.join(temporaryRoot, "preflight");
+  const instanceRoot = path.join(root, "instances");
+  await fsp.mkdir(instanceRoot, { recursive: true });
+  const report = await checkInstanceHealth({
+    instance: {
+      id: "fresh-instance",
+      version: "1.21.1",
+      status: "setup",
+      javaPath: "/old/windows/java.exe",
+    },
+    settings: { memory: 4, javaPath: "" },
+    sharedRoot: path.join(root, "shared"),
+    instancesRoot: instanceRoot,
+    inspectJavaFn: async () => null,
+    totalMemory: 16 * 1024 ** 3,
+  });
+  assert.equal(report.status, "setup");
+  assert.equal(report.canLaunch, true);
+  assert.equal(
+    report.checks.find((check) => check.code === "java-stale")?.action,
+    "auto",
+  );
+});
+
+test("Onyx Picks содержит уникальные устанавливаемые Modrinth-слаги", () => {
+  assert.equal(PICK_DEFINITIONS.length, 5);
+  assert.equal(
+    new Set(PICK_DEFINITIONS.map((pick) => pick.slug)).size,
+    PICK_DEFINITIONS.length,
+  );
+  assert.ok(
+    PICK_DEFINITIONS.every(
+      (pick) =>
+        /^[a-z0-9-]+$/.test(pick.slug) &&
+        pick.minimumMemoryGiB <= pick.recommendedMemoryGiB,
+    ),
+  );
+});
+
+test("Quick Join разбирает домены, порты и IPv6 без двусмысленности", () => {
+  assert.deepEqual(parseServerAddress("play.example.org:25566"), {
+    host: "play.example.org",
+    port: 25566,
+    address: "play.example.org:25566",
+  });
+  assert.deepEqual(parseServerAddress("[2001:db8::1]:25570"), {
+    host: "2001:db8::1",
+    port: 25570,
+    address: "[2001:db8::1]:25570",
+  });
+  assert.deepEqual(parseServerAddress("localhost"), {
+    host: "localhost",
+    port: 25565,
+    address: "localhost",
+  });
+  assert.equal(parseServerAddress("   "), null);
+  assert.throws(() => parseServerAddress("https://example.org"));
+  assert.throws(() => parseServerAddress("example.org:70000"));
+  assert.throws(() => parseServerAddress("bad host"));
+});
+
+test("Minecraft status protocol разбирает фрагментированный JSON-ответ", () => {
+  const payload = {
+    version: { name: "1.21.1", protocol: 767 },
+    players: { online: 12, max: 50 },
+    description: {
+      text: "Onyx ",
+      extra: [{ text: "Server", color: "green" }],
+    },
+  };
+  const json = encodeString(JSON.stringify(payload));
+  const body = Buffer.concat([encodeVarInt(0), json]);
+  const response = Buffer.concat([encodeVarInt(body.length), body]);
+
+  assert.equal(parseStatusResponse(response.subarray(0, 2)), null);
+  assert.deepEqual(parseStatusResponse(response), payload);
+  assert.deepEqual(decodeVarInt(encodeVarInt(767)), {
+    value: 767,
+    size: 2,
+  });
+  assert.equal(motdToText(payload.description), "Onyx Server");
+});
+
+test("Проверка сервера учитывает Minecraft DNS SRV и явный порт", async () => {
+  const address = parseServerAddress("play.example.org");
+  const srv = await resolveMinecraftEndpoint(address, "play.example.org", {
+    resolveSrvFn: async (name) => {
+      assert.equal(name, "_minecraft._tcp.play.example.org");
+      return [
+        {
+          name: "node.example.org.",
+          port: 25570,
+          priority: 0,
+          weight: 10,
+        },
+      ];
+    },
+  });
+  assert.deepEqual(srv, {
+    host: "node.example.org",
+    port: 25570,
+    viaSrv: true,
+  });
+
+  const explicit = await resolveMinecraftEndpoint(
+    parseServerAddress("play.example.org:25566"),
+    "play.example.org:25566",
+    {
+      resolveSrvFn: async () => {
+        throw new Error("SRV не должен запрашиваться");
+      },
+    },
+  );
+  assert.deepEqual(explicit, {
+    host: "play.example.org",
+    port: 25566,
+    viaSrv: false,
+  });
+});
+
+test("Guard находит одинаковый внутренний ID в разных mod JAR", async () => {
+  const instanceDirectory = path.join(temporaryRoot, "duplicate-mods");
+  const modsDirectory = path.join(instanceDirectory, "mods");
+  await writeTestJar(path.join(modsDirectory, "first.jar"), {
+    "fabric.mod.json": JSON.stringify({
+      schemaVersion: 1,
+      id: "example_mod",
+      name: "Example One",
+      version: "1.0.0",
+    }),
+  });
+  await writeTestJar(path.join(modsDirectory, "second.jar"), {
+    "fabric.mod.json": JSON.stringify({
+      schemaVersion: 1,
+      id: "example_mod",
+      name: "Example Two",
+      version: "2.0.0",
+    }),
+  });
+  await writeTestJar(path.join(modsDirectory, "forge.jar"), {
+    "META-INF/mods.toml": `
+      [[mods]]
+      modId="unique_forge_mod"
+      version="1.0.0"
+    `,
+  });
+
+  const scan = await scanInstanceMods(instanceDirectory);
+  assert.equal(scan.scannedCount, 3);
+  assert.equal(scan.recognizedCount, 3);
+  assert.deepEqual(scan.duplicates, [
+    {
+      id: "example_mod",
+      files: ["first.jar", "second.jar"],
+    },
+  ]);
+  assert.deepEqual(
+    parseTomlModIds('modId="one"\nmodId = "two"\nmodId="one"'),
+    ["one", "two"],
+  );
+
+  const cachedScan = await scanInstanceMods(instanceDirectory);
+  assert.deepEqual(cachedScan.duplicates, scan.duplicates);
+});
+
+test("Crash Bisect narrows candidates and restores temporary changes", async () => {
+  const instancesRoot = path.join(temporaryRoot, "bisect-instances");
+  const instanceId = "bisect-instance";
+  const modsRoot = path.join(instancesRoot, instanceId, "mods");
+  await fsp.mkdir(modsRoot, { recursive: true });
+  for (const name of ["alpha.jar", "beta.jar", "gamma.jar", "omega.jar"]) {
+    await fsp.writeFile(path.join(modsRoot, name), name);
+  }
+
+  const first = await startBisect({ instancesRoot, instanceId });
+  assert.equal(first.status, "testing");
+  assert.deepEqual(first.testing, ["alpha.jar", "beta.jar"]);
+  assert.ok(await fsp.stat(path.join(modsRoot, "alpha.jar.disabled")));
+
+  const second = await reportBisectResult({
+    instancesRoot,
+    instanceId,
+    gameStarted: false,
+  });
+  assert.deepEqual(second.candidates, ["gamma.jar", "omega.jar"]);
+  assert.deepEqual(second.testing, ["gamma.jar"]);
+  assert.ok(await fsp.stat(path.join(modsRoot, "alpha.jar")));
+
+  const found = await reportBisectResult({
+    instancesRoot,
+    instanceId,
+    gameStarted: true,
+  });
+  assert.equal(found.status, "found");
+  assert.equal(found.culprit, "gamma.jar");
+  assert.ok(await fsp.stat(path.join(modsRoot, "gamma.jar")));
+
+  const result = await finishBisect({
+    instancesRoot,
+    instanceId,
+    disableCulprit: true,
+  });
+  assert.deepEqual(result, { culprit: "gamma.jar", disabled: true });
+  assert.ok(await fsp.stat(path.join(modsRoot, "gamma.jar.disabled")));
+  assert.equal(
+    await readBisectSession({ instancesRoot, instanceId }),
+    null,
+  );
+});
+
+test("World Guard snapshots and restores saves with a safety snapshot", async () => {
+  const instancesRoot = path.join(temporaryRoot, "world-guard-instances");
+  const worldGuardRoot = path.join(temporaryRoot, "world-guard-storage");
+  const instanceId = "world-instance";
+  const worldRoot = path.join(
+    instancesRoot,
+    instanceId,
+    "saves",
+    "Test World",
+  );
+  const levelPath = path.join(worldRoot, "level.dat");
+  await fsp.mkdir(worldRoot, { recursive: true });
+  await fsp.writeFile(levelPath, "before");
+
+  const snapshot = await createWorldSnapshot({
+    instancesRoot,
+    worldGuardRoot,
+    instanceId,
+    reason: "manual",
+  });
+  assert.deepEqual(snapshot.worlds, ["Test World"]);
+  assert.equal((await listWorldSnapshots({ worldGuardRoot, instanceId })).length, 1);
+
+  await fsp.writeFile(levelPath, "after");
+  const restored = await restoreWorldSnapshot({
+    instancesRoot,
+    worldGuardRoot,
+    instanceId,
+    snapshotId: snapshot.id,
+  });
+  assert.equal(restored.restored, true);
+  assert.equal(await fsp.readFile(levelPath, "utf8"), "before");
+  const snapshots = await listWorldSnapshots({ worldGuardRoot, instanceId });
+  assert.equal(snapshots.length, 2);
+  assert.equal(snapshots[0].reason, "pre-restore");
+});
+
+test("Update Preview classifies added, changed, and removed pack files", () => {
+  const previous = {
+    files: [
+      { path: "mods/keep.jar", fileSize: 10, hashes: { sha1: "same" } },
+      { path: "mods/change.jar", fileSize: 20, hashes: { sha1: "old" } },
+      { path: "mods/remove.jar", fileSize: 30, hashes: { sha1: "gone" } },
+    ],
+  };
+  const next = {
+    files: [
+      { path: "mods/keep.jar", fileSize: 10, hashes: { sha1: "same" } },
+      { path: "mods/change.jar", fileSize: 24, hashes: { sha1: "new" } },
+      { path: "mods/add.jar", fileSize: 40, hashes: { sha1: "added" } },
+      {
+        path: "server-only.jar",
+        fileSize: 99,
+        hashes: { sha1: "server" },
+        env: { client: "unsupported" },
+      },
+    ],
+  };
+  const preview = comparePackIndexes(previous, next);
+  assert.deepEqual(preview.added.map((file) => file.path), ["mods/add.jar"]);
+  assert.deepEqual(preview.changed.map((file) => file.path), [
+    "mods/change.jar",
+  ]);
+  assert.deepEqual(preview.removed.map((file) => file.path), [
+    "mods/remove.jar",
+  ]);
+  assert.equal(preview.unchanged, 1);
+  assert.equal(preview.downloadBytes, 64);
+});
+
+test("Onyx Sync keeps reproducible settings but excludes local secrets", () => {
+  const profile = createSyncProfile({
+    instance: {
+      name: "Co-op",
+      version: "1.21.1",
+      loader: "Fabric 0.16.10",
+      description: "Friends",
+      color: "cyan",
+      glyph: "CO",
+      installProfile: {
+        minecraftVersion: "1.21.1",
+        loader: "fabric",
+        loaderVersion: "0.16.10",
+      },
+      settings: {
+        memory: 8,
+        recordFps: true,
+        javaPath: "C:\\private\\java.exe",
+        servers: [{ id: "main", name: "Main", address: "play.example.org" }],
+        selectedServerId: "main",
+      },
+    },
+    mods: [
+      {
+        name: "sodium.jar",
+        enabled: true,
+        sha1: "a".repeat(40),
+        projectId: "sodium",
+        versionId: "exact-version",
+      },
+    ],
+  });
+  assert.equal(profile.instance.settings.javaPath, undefined);
+  assert.equal(profile.instance.settings.recordFps, true);
+  assert.equal(profile.instance.settings.servers[0].address, "play.example.org");
+  assert.equal(profile.mods[0].versionId, "exact-version");
+
+  const validated = validateSyncProfile(profile);
+  assert.equal(validated.instance.installProfile.loader, "fabric");
+  assert.equal(validated.instance.settings.recordFps, true);
+  assert.equal(validated.mods.length, 1);
+  assert.throws(() => validateSyncProfile({ schema: 99 }));
+});
+
+test("Flight Recorder summarizes process samples and JVM log signals", async () => {
+  let now = 1_000;
+  const samples = [
+    { rssBytes: 2 * 1024 ** 3, cpuTimeMs: 0 },
+    { rssBytes: 5.5 * 1024 ** 3, cpuTimeMs: 2_500 },
+    { rssBytes: 4 * 1024 ** 3, cpuTimeMs: 3_000 },
+  ];
+  let cursor = 0;
+  const recorder = new FlightRecorder({
+    startedAt: 1_000,
+    allocatedMemoryGiB: 6,
+    now: () => now,
+    sampleProvider: async () =>
+      samples[Math.min(cursor++, samples.length - 1)],
+  });
+  recorder.pid = 42;
+  await recorder.sample();
+  now = 6_000;
+  await recorder.sample();
+  now = 12_000;
+  recorder.ingestLog(
+    "Backend library: LWJGL version\nGC(3) Pause Young 800.0ms",
+  );
+  const summary = await recorder.stop({ exitCode: 0, endedAt: now });
+
+  assert.equal(summary.sampleCount, 3);
+  assert.equal(summary.peakRssBytes, 5.5 * 1024 ** 3);
+  assert.equal(summary.startupMs, 11_000);
+  assert.equal(summary.gcEvents, 1);
+  assert.equal(summary.maxGcPauseMs, 800);
+  assert.ok(
+    summary.insights.some((insight) => insight.code === "memory-pressure"),
+  );
+  assert.ok(
+    summary.insights.some((insight) => insight.code === "long-gc-pause"),
+  );
+});
+
+test("Flight Recorder utility functions keep timelines bounded", () => {
+  assert.equal(parseCpuTime("1-02:03:04"), 93_784_000);
+  const timeline = Array.from({ length: 200 }, (_, index) => ({
+    atSeconds: index,
+    rssBytes: index,
+    cpuPercent: index / 2,
+  }));
+  const compact = downsampleTimeline(timeline, 60);
+  assert.equal(compact.length, 60);
+  assert.deepEqual(compact[0], timeline[0]);
+  assert.deepEqual(compact.at(-1), timeline.at(-1));
+  const insights = buildInsights(
+    {
+      peakRssBytes: 2 * 1024 ** 3,
+      recommendedMemoryGiB: 3,
+      startupMs: 20_000,
+      maxGcPauseMs: 0,
+      outOfMemory: false,
+      durationMs: 120_000,
+      sampleCount: 20,
+    },
+    8,
+    0,
+  );
+  assert.equal(insights[0].code, "memory-overallocated");
+});
+
+test("Flight Recorder flags meaningful regressions and ignores normal variance", () => {
+  const baseline = {
+    available: true,
+    peakRssBytes: 2 * 1024 ** 3,
+    startupMs: 20_000,
+    fps: { available: true, averageFps: 100 },
+  };
+  const regressions = buildRegressionInsights(
+    {
+      available: true,
+      peakRssBytes: 2.6 * 1024 ** 3,
+      startupMs: 27_000,
+      fps: { available: true, averageFps: 78 },
+    },
+    baseline,
+  );
+  assert.deepEqual(
+    regressions.map((insight) => insight.code),
+    ["fps-regression", "startup-regression", "memory-regression"],
+  );
+  assert.deepEqual(
+    buildRegressionInsights(
+      {
+        available: true,
+        peakRssBytes: 2.1 * 1024 ** 3,
+        startupMs: 22_000,
+        fps: { available: true, averageFps: 94 },
+      },
+      baseline,
+    ),
+    [],
+  );
+});
+
+test("FPS Recorder parses MangoHud FPS and frametime samples", () => {
+  const summary = parseFpsCsv(
+    [
+      "fps,frametime,cpu_load,gpu_load",
+      "60,16.7,30,40",
+      "58,17.2,31,41",
+      "30,33.3,35,45",
+      "62,16.1,28,39",
+    ].join("\n"),
+    { provider: "mangohud", sampleIntervalMs: 500 },
+  );
+  assert.equal(summary.provider, "mangohud");
+  assert.equal(summary.sampleCount, 4);
+  assert.equal(Math.round(summary.averageFps), 53);
+  assert.equal(summary.onePercentLowFps, 30);
+  assert.equal(summary.timeline[1].atSeconds, 0.5);
+});
+
+test("FPS Recorder derives FPS from PresentMon frame intervals", () => {
+  const summary = parseFpsCsv(
+    [
+      "Application,ProcessID,TimeInSeconds,MsBetweenPresents",
+      "javaw.exe,42,100.000,16.6667",
+      "javaw.exe,42,100.017,20.0000",
+      "javaw.exe,42,100.037,10.0000",
+    ].join("\n"),
+    { provider: "presentmon" },
+  );
+  assert.equal(summary.provider, "presentmon");
+  assert.equal(summary.sampleCount, 3);
+  assert.equal(Math.round(summary.averageFps), 70);
+  assert.ok(summary.timeline[2].atSeconds > 0.03);
+});
+
+test("FPS Recorder reports low and unstable sessions without false stable state", () => {
+  const insights = buildFpsInsights({
+    available: true,
+    averageFps: 40,
+    onePercentLowFps: 15,
+    stutterCount: 4,
+    sampleCount: 100,
+  });
+  assert.deepEqual(
+    insights.map((insight) => insight.code),
+    ["low-fps", "fps-instability", "frame-stutters"],
+  );
+});
+
+test("FPS provider detection finds a configured PresentMon executable", async () => {
+  const executable = path.join(temporaryRoot, "PresentMon.exe");
+  await fsp.writeFile(executable, "test");
+  const status = await detectFpsRecorder({
+    platform: "win32",
+    env: {
+      PATH: temporaryRoot,
+      PATHEXT: ".EXE",
+      ONYX_PRESENTMON_PATH: executable,
+    },
+  });
+  assert.equal(status.available, true);
+  assert.equal(status.provider, "presentmon");
+  assert.equal(status.executable, executable);
+});
+
+test("Mod profiles save and apply mod states without touching new mods", async () => {
+  const instancesRoot = path.join(temporaryRoot, "profile-instances");
+  const instanceId = "profile-demo";
+  const modsDirectory = path.join(instancesRoot, instanceId, "mods");
+  await fsp.mkdir(modsDirectory, { recursive: true });
+  await Promise.all([
+    fsp.writeFile(path.join(modsDirectory, "alpha.jar"), "alpha"),
+    fsp.writeFile(path.join(modsDirectory, "beta.jar.disabled"), "beta"),
+    fsp.writeFile(path.join(modsDirectory, "gamma.jar"), "gamma"),
+  ]);
+
+  const profile = await saveModProfile({
+    instancesRoot,
+    instanceId,
+    name: "  FPS   набор  ",
+    now: () => new Date("2026-07-29T10:00:00.000Z"),
+    idFactory: () => "11111111-1111-4111-8111-111111111111",
+  });
+  assert.equal(profile.name, "FPS набор");
+  assert.equal(profile.modCount, 3);
+  assert.equal(profile.enabledCount, 2);
+  const initialProfiles = await listModProfiles({
+    instancesRoot,
+    instanceId,
+  });
+  assert.equal(initialProfiles[0].matchesCurrent, true);
+  assert.equal(initialProfiles[0].changeCount, 0);
+
+  await fsp.rename(
+    path.join(modsDirectory, "alpha.jar"),
+    path.join(modsDirectory, "alpha.jar.disabled"),
+  );
+  await fsp.rename(
+    path.join(modsDirectory, "beta.jar.disabled"),
+    path.join(modsDirectory, "beta.jar"),
+  );
+  await fsp.rm(path.join(modsDirectory, "gamma.jar"));
+  await fsp.writeFile(path.join(modsDirectory, "new-mod.jar.disabled"), "new");
+
+  const result = await applyModProfile({
+    instancesRoot,
+    instanceId,
+    profileId: profile.id,
+  });
+  assert.deepEqual(result.changed, ["alpha.jar", "beta.jar"]);
+  assert.deepEqual(result.missing, ["gamma.jar"]);
+  assert.equal(await fsp.readFile(path.join(modsDirectory, "alpha.jar"), "utf8"), "alpha");
+  assert.equal(
+    await fsp.readFile(path.join(modsDirectory, "beta.jar.disabled"), "utf8"),
+    "beta",
+  );
+  assert.equal(
+    await fsp.readFile(path.join(modsDirectory, "new-mod.jar.disabled"), "utf8"),
+    "new",
+  );
+
+  const appliedProfiles = await listModProfiles({
+    instancesRoot,
+    instanceId,
+  });
+  assert.equal(appliedProfiles.length, 1);
+  assert.equal(appliedProfiles[0].matchesCurrent, false);
+  assert.equal(appliedProfiles[0].missingCount, 1);
+  assert.equal(
+    await deleteModProfile({
+      instancesRoot,
+      instanceId,
+      profileId: profile.id,
+    }),
+    true,
+  );
+  assert.deepEqual(
+    await listModProfiles({ instancesRoot, instanceId }),
+    [],
+  );
+});
+
+test("Mod profile application rolls back partial file changes", async () => {
+  const instancesRoot = path.join(temporaryRoot, "profile-rollback-instances");
+  const instanceId = "rollback-demo";
+  const modsDirectory = path.join(instancesRoot, instanceId, "mods");
+  await fsp.mkdir(modsDirectory, { recursive: true });
+  await Promise.all([
+    fsp.writeFile(path.join(modsDirectory, "one.jar"), "one"),
+    fsp.writeFile(path.join(modsDirectory, "two.jar"), "two"),
+  ]);
+  const profile = await saveModProfile({
+    instancesRoot,
+    instanceId,
+    name: "Both",
+  });
+  await Promise.all([
+    fsp.rename(
+      path.join(modsDirectory, "one.jar"),
+      path.join(modsDirectory, "one.jar.disabled"),
+    ),
+    fsp.rename(
+      path.join(modsDirectory, "two.jar"),
+      path.join(modsDirectory, "two.jar.disabled"),
+    ),
+  ]);
+
+  let renameCalls = 0;
+  await assert.rejects(
+    applyModProfile({
+      instancesRoot,
+      instanceId,
+      profileId: profile.id,
+      renameFile: async (source, destination) => {
+        renameCalls += 1;
+        if (renameCalls === 2) throw new Error("simulated rename failure");
+        await fsp.rename(source, destination);
+      },
+    }),
+    /изменения отменены/,
+  );
+  assert.equal(
+    await fsp.readFile(path.join(modsDirectory, "one.jar.disabled"), "utf8"),
+    "one",
+  );
+  assert.equal(
+    await fsp.readFile(path.join(modsDirectory, "two.jar.disabled"), "utf8"),
+    "two",
+  );
+});
+
+test("Support bundle redacts secrets, personal paths, email, and IP", async () => {
+  const sanitized = sanitizeSupportText(
+    [
+      "--username Steve --uuid abc --accessToken super-secret",
+      "Bearer header.payload.signature",
+      "C:\\Users\\Alice\\AppData\\Roaming\\.minecraft",
+      "/home/alice/.minecraft",
+      "mail alice@example.org server 192.168.1.44",
+      '{"refresh_token":"also-secret"}',
+    ].join("\n"),
+  );
+  assert.doesNotMatch(sanitized, /super-secret|also-secret|Alice|alice@example|192\.168/);
+  assert.match(sanitized, /<redacted>/);
+  assert.match(sanitized, /C:\\Users\\<user>/);
+  assert.match(sanitized, /\/home\/<user>/);
+  assert.match(sanitized, /<email>/);
+  assert.match(sanitized, /<ip>/);
+});
+
+test("Support bundle contains only share-safe instance metadata and log tail", async () => {
+  const destination = path.join(temporaryRoot, "onyx-support-test.zip");
+  const result = await createSupportBundle({
+    destination,
+    instance: {
+      id: "support-demo",
+      name: "QA Pack",
+      version: "1.21.1",
+      loader: "Fabric",
+      status: "error",
+      modCount: 12,
+      lastExitCode: 1,
+      settings: {
+        memory: 6,
+        javaPath: "C:\\Users\\Alice\\java.exe",
+        servers: [{ name: "Private", address: "private.example.org" }],
+        jvmArguments: ["-Dwork=/home/alice/game"],
+      },
+    },
+    sessions: [
+      {
+        id: "session-1",
+        startedAt: "2026-07-29T10:00:00.000Z",
+        endedAt: "2026-07-29T10:01:00.000Z",
+        durationMinutes: 1,
+        exitCode: 1,
+      },
+    ],
+    diagnostics: {
+      generatedAt: "2026-07-29T10:02:00.000Z",
+      launcher: { version: "1.6.0" },
+      system: { platform: "linux" },
+      storage: { gameDirectory: "/home/alice/.local/share/onyx" },
+      profile: { kind: "microsoft", name: "Alice" },
+      counts: { instances: 1 },
+      endpoints: [],
+    },
+    logContent:
+      "User alice@example.org from 10.0.0.4\n--accessToken secret-value",
+    analysis: [],
+    now: () => new Date("2026-07-29T10:03:00.000Z"),
+  });
+  assert.equal(result.files, 3);
+  assert.ok(result.bytes > 0);
+
+  const manifest = await readZipJson(destination, "onyx-support.json");
+  assert.equal(manifest.formatVersion, 1);
+  assert.equal(manifest.privacy.accountTokensIncluded, false);
+  assert.equal(manifest.instance.settings.memory, 6);
+  assert.equal(manifest.instance.settings.servers, undefined);
+  assert.deepEqual(manifest.diagnostics.profile, { kind: "microsoft" });
+  assert.match(manifest.diagnostics.storage.gameDirectory, /\/home\/<user>/);
+
+  const extracted = path.join(temporaryRoot, "support-extracted");
+  await extractZip(destination, extracted);
+  const log = await fsp.readFile(
+    path.join(extracted, "latest-launch.log.txt"),
+    "utf8",
+  );
+  assert.doesNotMatch(log, /alice@example|10\.0\.0\.4|secret-value/);
+});
+
+test("Instance storage analyzer classifies data and cleans only safe stale files", async () => {
+  const instancesRoot = path.join(temporaryRoot, "storage-instances");
+  const instanceId = "storage-demo";
+  const instanceRoot = path.join(instancesRoot, instanceId);
+  const now = new Date("2026-07-29T12:00:00.000Z");
+  const oldBase = now.getTime() - 10 * 24 * 60 * 60 * 1000;
+  const writeFixture = async (relative, content, mtimeMs = now.getTime()) => {
+    const destination = path.join(instanceRoot, relative);
+    await fsp.mkdir(path.dirname(destination), { recursive: true });
+    await fsp.writeFile(destination, content);
+    const modified = new Date(mtimeMs);
+    await fsp.utimes(destination, modified, modified);
+    return destination;
+  };
+
+  const worldFile = await writeFixture("saves/Test World/level.dat", "world-data");
+  const modFile = await writeFixture("mods/sodium.jar", "mod-data");
+  await writeFixture("config/sodium-options.json", "config-data");
+  await writeFixture("resourcepacks/faithful.zip", "resource-data");
+  await writeFixture("screenshots/shot.png", "image-data");
+  await writeFixture(
+    "mods/interrupted.jar.part",
+    "partial-data",
+    now.getTime() - 2 * 60 * 60 * 1000,
+  );
+
+  for (let index = 0; index < 5; index += 1) {
+    await writeFixture(
+      `logs/old-${index}.log`,
+      `old-log-${index}`,
+      oldBase + index * 60_000,
+    );
+  }
+  const recentLog = await writeFixture(
+    "logs/latest.log",
+    "latest-log",
+    now.getTime() - 60_000,
+  );
+  for (let index = 0; index < 4; index += 1) {
+    await writeFixture(
+      `crash-reports/crash-${index}.txt`,
+      `crash-${index}`,
+      oldBase + index * 60_000,
+    );
+  }
+  for (let index = 0; index < 3; index += 1) {
+    await writeFixture(
+      `hs_err_pid${index}.log`,
+      `native-${index}`,
+      oldBase + index * 60_000,
+    );
+  }
+
+  const report = await analyzeInstanceStorage({
+    instancesRoot,
+    instanceId,
+    now: () => now,
+  });
+  assert.ok(report.totalBytes > 0);
+  assert.equal(
+    report.categories.find((category) => category.id === "worlds").files,
+    1,
+  );
+  assert.equal(
+    report.categories.find((category) => category.id === "mods").files,
+    2,
+  );
+  assert.deepEqual(report.cleanable.groups, {
+    logs: { bytes: 27, files: 3 },
+    crashReports: { bytes: 15, files: 2 },
+    partial: { bytes: 12, files: 1 },
+  });
+  assert.equal(report.cleanable.files, 6);
+
+  const cleaned = await cleanupInstanceStorage({
+    instancesRoot,
+    instanceId,
+    now: () => now,
+  });
+  assert.equal(cleaned.removedFiles, 6);
+  assert.equal(cleaned.failed, 0);
+  assert.equal(cleaned.report.cleanable.files, 0);
+  assert.equal(await fsp.readFile(worldFile, "utf8"), "world-data");
+  assert.equal(await fsp.readFile(modFile, "utf8"), "mod-data");
+  assert.equal(await fsp.readFile(recentLog, "utf8"), "latest-log");
+  assert.equal((await fsp.readdir(path.join(instanceRoot, "logs"))).length, 3);
+  assert.equal(
+    (await fsp.readdir(path.join(instanceRoot, "crash-reports"))).length,
+    3,
+  );
+});
