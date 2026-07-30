@@ -167,4 +167,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
-        run: gh release create "$TAG" release-assets/* --verify-tag --generate-notes --title "Onyx Launcher ${VERSION}"
+        run: gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "Onyx Launcher ${VERSION}"
