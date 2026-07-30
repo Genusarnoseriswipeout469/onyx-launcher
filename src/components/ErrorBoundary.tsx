@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { CircleAlert, RefreshCw } from "lucide-react";
 import { useI18n } from "../i18n";
