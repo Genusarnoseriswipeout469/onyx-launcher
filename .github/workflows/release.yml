@@ -135,7 +135,8 @@ jobs:
         run: |
           Get-ChildItem release -Filter *.exe | ForEach-Object {
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash *$($_.Name)"
+            $assetName = $_.Name.Replace(" ", ".")
+            "$hash *$assetName"
           } | Set-Content -LiteralPath release/SHA256SUMS-windows.txt -Encoding ascii
 
       - name: Upload Windows artifacts
