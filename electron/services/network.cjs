@@ -14,7 +14,7 @@ function delay(ms) {
 }
 
 function abortError() {
-  const error = new Error("Операция отменена");
+  const error = new Error("Operation cancelled");
   error.name = "AbortError";
   return error;
 }
@@ -45,14 +45,14 @@ async function fetchWithRetry(url, options = {}, attempts = 3) {
     }
     if (attempt < attempts) await delay(350 * 2 ** (attempt - 1));
   }
-  throw lastError || new Error(`Не удалось выполнить запрос: ${url}`);
+  throw lastError || new Error(`Request failed: ${url}`);
 }
 
 function endpointName(url) {
   try {
     return new URL(url).host;
   } catch {
-    return "сервер";
+    return "server";
   }
 }
 
@@ -62,9 +62,9 @@ async function readJsonResponse(response, url) {
   try {
     return JSON.parse(body);
   } catch {
-    const contentType = response.headers.get("content-type") || "без Content-Type";
+    const contentType = response.headers.get("content-type") || "without Content-Type";
     const error = new Error(
-      `${endpointName(url)} вернул неожиданный ответ вместо JSON ` +
+      `${endpointName(url)} returned an unexpected response instead of JSON ` +
         `(${response.status}, ${contentType})`,
     );
     error.code = "INVALID_JSON_RESPONSE";
@@ -86,7 +86,7 @@ async function fetchJsonResponse(url, options = {}, attempts = 3) {
       if (attempt < attempts) await delay(350 * 2 ** (attempt - 1));
     }
   }
-  throw lastError || new Error(`Не удалось получить JSON: ${url}`);
+  throw lastError || new Error(`Failed to fetch JSON: ${url}`);
 }
 
 async function fetchJson(url, options = {}) {
@@ -105,7 +105,7 @@ async function fetchJson(url, options = {}) {
       payload?.Message ||
       "";
     throw new Error(
-      `Сервер вернул ${response.status}${
+      `The server returned ${response.status}${
         message ? `: ${String(message).slice(0, 180)}` : ""
       }`,
     );
@@ -205,11 +205,11 @@ async function downloadFile({
           return { destination, cached: false, resumed: true };
         }
         await fsp.rm(temporary, { force: true }).catch(() => undefined);
-        throw new Error("Сервер отклонил продолжение загрузки");
+        throw new Error("The server refused to resume the download");
       }
       if (!response.ok || !response.body) {
         throw new Error(
-          `Не удалось скачать файл (${response.status}): ${url}`,
+          `Failed to download the file (${response.status}): ${url}`,
         );
       }
 
@@ -268,7 +268,7 @@ async function downloadFile({
       });
 
       if (!(await fileMatches(temporary, expected))) {
-        const error = new Error("Контрольная сумма загруженного файла не совпала");
+        const error = new Error("The downloaded file checksum does not match");
         error.code = "INTEGRITY_MISMATCH";
         throw error;
       }
@@ -291,7 +291,7 @@ async function downloadFile({
       }
     }
   }
-  throw lastError || new Error(`Не удалось скачать файл: ${url}`);
+  throw lastError || new Error(`Failed to download the file: ${url}`);
 }
 
 async function downloadMany(items, options = {}) {

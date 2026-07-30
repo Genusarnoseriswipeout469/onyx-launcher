@@ -35,7 +35,7 @@ function parseServerAddress(input) {
     value.includes("://") ||
     /[\\/?#@]/.test(value)
   ) {
-    throw new Error("Укажите адрес сервера без протокола, пути и пробелов");
+    throw new Error("Enter the server address without a protocol, path, or spaces");
   }
 
   let host = "";
@@ -43,26 +43,26 @@ function parseServerAddress(input) {
   if (value.startsWith("[")) {
     const match = value.match(/^\[([^\]]+)\](?::(\d{1,5}))?$/);
     if (!match) {
-      throw new Error("Некорректный IPv6-адрес сервера");
+      throw new Error("Invalid IPv6 server address");
     }
     host = match[1];
     portText = match[2] || "";
     if (net.isIP(host) !== 6) {
-      throw new Error("Некорректный IPv6-адрес сервера");
+      throw new Error("Invalid IPv6 server address");
     }
   } else {
     const colonCount = (value.match(/:/g) || []).length;
     if (colonCount > 1) {
       host = value;
       if (net.isIP(host) !== 6) {
-        throw new Error("IPv6 с портом укажите как [адрес]:порт");
+        throw new Error("Enter IPv6 with a port as [address]:port");
       }
     } else if (colonCount === 1) {
       const separator = value.lastIndexOf(":");
       host = value.slice(0, separator);
       portText = value.slice(separator + 1);
       if (!/^\d{1,5}$/.test(portText)) {
-        throw new Error("Порт сервера должен быть числом от 1 до 65535");
+        throw new Error("The server port must be a number from 1 to 65535");
       }
     } else {
       host = value;
@@ -70,7 +70,7 @@ function parseServerAddress(input) {
   }
 
   host = host.replace(/\.$/, "");
-  if (!host) throw new Error("Укажите адрес сервера");
+  if (!host) throw new Error("Enter a server address");
 
   if (!net.isIP(host)) {
     const asciiHost = domainToASCII(host).toLowerCase();
@@ -85,14 +85,14 @@ function parseServerAddress(input) {
           !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label),
       )
     ) {
-      throw new Error("Некорректное доменное имя сервера");
+      throw new Error("Invalid server domain name");
     }
     host = asciiHost;
   }
 
   const port = portText ? Number(portText) : 25565;
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("Порт сервера должен быть числом от 1 до 65535");
+    throw new Error("The server port must be a number from 1 to 65535");
   }
   const bracketedHost = net.isIP(host) === 6 ? `[${host}]` : host;
   return {
@@ -160,7 +160,7 @@ function mavenArtifact(name, baseUrl = MOJANG_LIBRARIES) {
   const [coordinate, extensionPart] = name.split("@");
   const extension = extensionPart || "jar";
   const parts = coordinate.split(":");
-  if (parts.length < 3) throw new Error(`Некорректная Maven-координата: ${name}`);
+  if (parts.length < 3) throw new Error(`Invalid Maven coordinate: ${name}`);
   const [group, artifact, version, classifier] = parts;
   const filename = `${artifact}-${version}${
     classifier ? `-${classifier}` : ""
@@ -323,11 +323,11 @@ class MinecraftService {
     } catch {
       const manifest = await this.getManifest();
       const entry = manifest.versions.find((version) => version.id === versionId);
-      if (!entry) throw new Error(`Версия Minecraft ${versionId} не найдена`);
+      if (!entry) throw new Error(`Minecraft version ${versionId} was not found`);
       onProgress?.({
         stage: "metadata",
         progress: 2,
-        message: `Получаю данные Minecraft ${versionId}…`,
+        message: `Fetching Minecraft ${versionId}…`,
       });
       const version = await fetchJson(entry.url, { signal });
       await fsp.mkdir(versionDirectory, { recursive: true });
@@ -450,7 +450,7 @@ class MinecraftService {
         onProgress?.({
           stage: "minecraft",
           progress: 4 + Math.round(Math.max(fileProgress, byteProgress) * 76),
-          message: `Устанавливаю Minecraft ${versionId}: ${current}`,
+          message: `Installing Minecraft ${versionId}: ${current}`,
           completed,
           count,
           received,
@@ -487,14 +487,14 @@ class MinecraftService {
       onProgress?.({
         stage: "natives",
         progress: 80 + Math.round(((index + 1) / nativeFiles.length) * 8),
-        message: "Подготавливаю системные библиотеки…",
+        message: "Preparing native libraries…",
       });
     }
 
     onProgress?.({
       stage: "minecraft",
       progress: 88,
-      message: `Minecraft ${versionId} установлен`,
+      message: `Minecraft ${versionId} installed`,
     });
     return version;
   }
@@ -502,7 +502,7 @@ class MinecraftService {
   async installLoader(profile, javaPath, onProgress, signal) {
     signal?.throwIfAborted();
     const loader = String(profile.loader || "vanilla").toLowerCase();
-    if (loader === "vanilla" || loader === "без") {
+    if (loader === "vanilla") {
       return profile.minecraftVersion;
     }
     if (loader === "fabric") {
@@ -514,7 +514,7 @@ class MinecraftService {
     if (loader === "forge" || loader === "neoforge") {
       return this.installForgeLike(profile, javaPath, onProgress, signal);
     }
-    throw new Error(`Загрузчик ${profile.loader} пока не поддерживается`);
+    throw new Error(`Loader ${profile.loader} is not supported yet`);
   }
 
   async installFabric(profile, onProgress, signal) {
@@ -531,7 +531,7 @@ class MinecraftService {
         loaders.find((entry) => entry.loader?.stable)?.loader?.version ||
         loaders[0]?.loader?.version;
     }
-    if (!loaderVersion) throw new Error("Fabric Loader не найден для этой версии");
+    if (!loaderVersion) throw new Error("Fabric Loader was not found for this version");
     const version = await fetchJson(
       `https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(
         profile.minecraftVersion,
@@ -559,7 +559,7 @@ class MinecraftService {
         .sort(compareSemanticVersions)
         .at(-1);
     }
-    if (!loaderVersion) throw new Error("Quilt Loader не найден для этой версии");
+    if (!loaderVersion) throw new Error("Quilt Loader was not found for this version");
     const version = await fetchJson(
       `https://meta.quiltmc.org/v3/versions/loader/${encodeURIComponent(
         profile.minecraftVersion,
@@ -590,7 +590,7 @@ class MinecraftService {
         onProgress?.({
           stage: "loader",
           progress: 88 + Math.round((completed / Math.max(count, 1)) * 10),
-          message: `Устанавливаю загрузчик: ${current}`,
+          message: `Installing loader: ${current}`,
         }),
     });
   }
@@ -636,7 +636,7 @@ class MinecraftService {
     }
     if (!loaderVersion) {
       throw new Error(
-        `Не удалось подобрать ${loader} для Minecraft ${profile.minecraftVersion}`,
+        `Failed to find ${loader} for Minecraft ${profile.minecraftVersion}`,
       );
     }
 
@@ -662,7 +662,7 @@ class MinecraftService {
         onProgress?.({
           stage: "loader",
           progress: 88 + (total ? Math.round((received / total) * 4) : 1),
-          message: `Загружаю установщик ${loader}…`,
+          message: `Downloading installer for ${loader}…`,
         }),
     });
 
@@ -684,7 +684,7 @@ class MinecraftService {
         onProgress?.({
           stage: "loader",
           progress: 94,
-          message: `Устанавливаю ${loader}…`,
+          message: `Installing ${loader}…`,
         });
       });
       child.stderr.on("data", (chunk) => {
@@ -699,14 +699,14 @@ class MinecraftService {
       child.on("close", (code) => {
         signal?.removeEventListener("abort", abort);
         if (aborted) {
-          const error = new Error("Операция отменена");
+          const error = new Error("Operation cancelled");
           error.name = "AbortError";
           reject(error);
         } else if (code === 0) resolve();
         else
           reject(
             new Error(
-              `Установщик ${loader} завершился с кодом ${code}: ${output.slice(
+              `The ${loader} installer exited with code ${code}: ${output.slice(
                 -500,
               )}`,
             ),
@@ -727,7 +727,7 @@ class MinecraftService {
       )
       .sort()
       .at(-1);
-    if (!match) throw new Error(`Профиль ${loader} не появился после установки`);
+    if (!match) throw new Error(`The ${loader} profile did not appear after installation`);
     return match;
   }
 
@@ -764,7 +764,7 @@ class MinecraftService {
     onProgress?.({
       stage: "ready",
       progress: 100,
-      message: "Инстанс полностью готов",
+      message: "Instance is ready",
     });
     return {
       resolvedVersionId: versionId,
@@ -801,7 +801,7 @@ class MinecraftService {
   async loadResolvedVersion(versionId) {
     const seen = new Set();
     const load = async (id) => {
-      if (seen.has(id)) throw new Error(`Циклическое наследование версии ${id}`);
+      if (seen.has(id)) throw new Error(`Cyclic version inheritance for ${id}`);
       seen.add(id);
       const jsonPath = path.join(
         this.sharedRoot,
@@ -857,7 +857,7 @@ class MinecraftService {
     libraries.push(clientJar);
     const classpath = libraries.join(path.delimiter);
 
-    const localName = account?.name || "Игрок";
+    const localName = account?.name || "Player";
     const localUuid = offlineUuid(localName);
     const launchAccount = account || {
       name: localName,
@@ -971,7 +971,7 @@ class MinecraftService {
     const logPath = path.join(gameDirectory, "logs", "onyx-latest.log");
     const logStream = fs.createWriteStream(logPath, { flags: "a" });
     logStream.write(
-      `\n[${new Date().toISOString()}] Onyx запускает ${versionId}\n`,
+      `\n[${new Date().toISOString()}] Onyx is launching ${versionId}\n`,
     );
     const requiredJava =
       version.javaVersion?.majorVersion ||
@@ -1008,7 +1008,7 @@ class MinecraftService {
     child.on("error", (error) => handle("error")(`${error.message}\n`));
     child.on("close", (code) => {
       logStream.end(
-        `\n[${new Date().toISOString()}] Игра завершилась с кодом ${code}\n`,
+        `\n[${new Date().toISOString()}] Game exited with code ${code}\n`,
       );
       onExit?.({ code, logPath });
     });

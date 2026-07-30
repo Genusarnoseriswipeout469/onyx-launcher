@@ -3,98 +3,98 @@ const RULES = [
     code: "out-of-memory",
     pattern: /OutOfMemoryError|Java heap space|GC overhead limit exceeded/i,
     severity: "error",
-    title: "Minecraft не хватило памяти",
+    title: "Minecraft ran out of memory",
     message:
-      "Увеличьте память инстанса на 2–4 ГБ или отключите тяжёлые моды и ресурспаки.",
+      "Increase the instance memory by 2–4 GB or disable resource-heavy mods and resource packs.",
   },
   {
     code: "wrong-java",
     pattern:
       /UnsupportedClassVersionError|class file version \d+\.0|only recognizes class file versions/i,
     severity: "error",
-    title: "Несовместимая версия Java",
+    title: "Incompatible Java version",
     message:
-      "Сбросьте пользовательский путь Java — Onyx автоматически подберёт подходящую версию.",
+      "Reset the custom Java path so Onyx can select a compatible version automatically.",
   },
   {
     code: "missing-dependency",
     pattern:
       /ModResolutionException|requires .+ but|missing (?:mandatory )?dependencies|Dependency resolution failed/i,
     severity: "error",
-    title: "Не хватает зависимости мода",
+    title: "A mod dependency is missing",
     message:
-      "Откройте содержимое инстанса и обновите моды. В журнале ниже указано имя отсутствующей зависимости.",
+      "Open the instance content and update its mods. The log below identifies the missing dependency.",
   },
   {
     code: "mixin-conflict",
     pattern:
       /MixinApplyError|MixinTransformerError|mixin.+(?:failed|error)|InjectionError/i,
     severity: "error",
-    title: "Конфликт модов или миксинов",
+    title: "Mod or mixin conflict",
     message:
-      "Один из модов несовместим с текущей версией игры. Обновите моды или временно отключайте последние по одному.",
+      "A mod is incompatible with the current game version. Update the mods or temporarily disable the newest ones one at a time.",
   },
   {
     code: "native-crash",
     pattern: /EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected by the Java Runtime/i,
     severity: "warning",
-    title: "Сбой драйвера или нативной библиотеки",
+    title: "Driver or native library crash",
     message:
-      "Обновите видеодрайвер, отключите оверлеи и проверьте моды рендера. Это не повреждение мира.",
+      "Update the graphics driver, disable overlays, and check rendering mods. Your world is not corrupted.",
   },
   {
     code: "disk-full",
     pattern:
-      /No space left on device|There is not enough space|Недостаточно места на диске/i,
+      /No space left on device|There is not enough space/i,
     severity: "error",
-    title: "На диске закончилось место",
+    title: "The disk is full",
     message:
-      "Освободите место или перенесите папку инстансов через безопасный перенос в настройках.",
+      "Free some space or use the safe migration option in Settings to move the instances directory.",
   },
   {
     code: "authentication",
     pattern:
       /InvalidCredentialsException|Failed to log in|authentication servers are down/i,
     severity: "warning",
-    title: "Проблема авторизации",
+    title: "Authentication problem",
     message:
-      "Переключите Microsoft-аккаунт или повторите запуск после восстановления сервисов.",
+      "Switch Microsoft accounts or try again after the services recover.",
   },
   {
     code: "corrupted-file",
     pattern:
       /zip END header not found|invalid (?:LOC|CEN) header|zip file is empty|checksum (?:failed|mismatch)|hash mismatch/i,
     severity: "error",
-    title: "Повреждён файл игры или мода",
+    title: "A game or mod file is corrupted",
     message:
-      "Запустите автоматическое восстановление — Onyx перекачает только повреждённые файлы.",
+      "Run automatic repair so Onyx downloads only the corrupted files again.",
   },
   {
     code: "bad-jvm-arguments",
     pattern:
       /Unrecognized VM option|Could not create the Java Virtual Machine|Invalid maximum heap size/i,
     severity: "error",
-    title: "Java не принимает параметры запуска",
+    title: "Java rejected the launch arguments",
     message:
-      "Сбросьте пользовательские JVM-аргументы и проверьте объём выделенной памяти.",
+      "Reset the custom JVM arguments and check the allocated memory.",
   },
   {
     code: "graphics-init",
     pattern:
       /GLFW error|OpenGL[^\n]*(?:not supported|failed|error)|Failed to create window|Pixel format launch/i,
     severity: "error",
-    title: "Minecraft не смог запустить графику",
+    title: "Minecraft could not initialize graphics",
     message:
-      "Обновите видеодрайвер и отключите несовместимые моды рендера или оверлеи.",
+      "Update the graphics driver and disable incompatible rendering mods or overlays.",
   },
   {
     code: "permission-denied",
     pattern:
-      /AccessDeniedException|Permission denied|Отказано в доступе|Доступ запрещен/i,
+      /AccessDeniedException|Permission denied/i,
     severity: "error",
-    title: "Нет доступа к файлам инстанса",
+    title: "Instance files are not accessible",
     message:
-      "Проверьте владельца и права папки либо перенесите инстансы в доступный каталог.",
+      "Check the folder owner and permissions, or move the instances to an accessible directory.",
   },
 ];
 

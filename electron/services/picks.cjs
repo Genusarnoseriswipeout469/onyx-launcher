@@ -77,7 +77,7 @@ async function getOnyxPicks({ force = false, signal } = {}) {
   );
   const picks = resolved.filter(Boolean);
   if (!picks.length) {
-    throw new Error("Редакторская подборка временно недоступна");
+    throw new Error("The curated collection is temporarily unavailable");
   }
   cachedPicks = picks;
   cachedAt = Date.now();

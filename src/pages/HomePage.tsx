@@ -22,6 +22,7 @@ interface HomePageProps {
   profileName: string;
   onNavigate: (route: RouteId) => void;
   onPlay: (instance: GameInstance) => void;
+  onOpen: (instance: GameInstance) => void;
   onCreate: () => void;
   onConfigure: (instance: GameInstance) => void;
 }
@@ -32,6 +33,7 @@ export function HomePage({
   profileName,
   onNavigate,
   onPlay,
+  onOpen,
   onCreate,
   onConfigure,
 }: HomePageProps) {
@@ -49,11 +51,11 @@ export function HomePage({
     instances.find((instance) => instance.favorite) ?? instances[0];
   const recent = instances.slice(0, 3);
   const displayName = (instance: GameInstance) =>
-    instance.id === "vanilla-start" && instance.name === "Чистая игра"
+    instance.id === "vanilla-start" && instance.name === "Pure Game"
       ? t("home.defaultName")
       : instance.name;
   const displayDescription = (instance: GameInstance) =>
-    instance.id === "vanilla-start" && instance.description === "Minecraft без модификаций"
+    instance.id === "vanilla-start" && instance.description === "Minecraft without modifications"
       ? t("home.defaultDescription")
       : instance.description;
   const totalMinutes = instances.reduce(
@@ -134,7 +136,7 @@ export function HomePage({
     return {
       date,
       minutes,
-      label: new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+      label: new Intl.DateTimeFormat("en-US", {
         weekday: "narrow",
       }).format(date),
     };
@@ -154,7 +156,7 @@ export function HomePage({
         <div>
           <p className="eyebrow">{t("home.eyebrow")}</p>
           <h1>
-            {greeting}, <span>{profileName === "Игрок" ? t("profile.player") : profileName}</span>
+            {greeting}, <span>{profileName === "Player" ? t("profile.player") : profileName}</span>
           </h1>
           <p>{t("home.subtitle")}</p>
         </div>
@@ -181,7 +183,7 @@ export function HomePage({
                       : t("home.status.continue")}
               </span>
               <i />
-              {featured.lastPlayed === "Ещё не запускался" ? t("home.neverPlayed") : featured.lastPlayed}
+              {featured.lastPlayed === "Never played" ? t("home.neverPlayed") : featured.lastPlayed}
             </div>
             <h2>{displayName(featured)}</h2>
             <p>{displayDescription(featured)}</p>
@@ -266,10 +268,19 @@ export function HomePage({
 
         <div className="recent-grid">
           {recent.map((instance, index) => (
-            <motion.button
-              className={`recent-card recent-card--${instance.color}`}
+            <motion.article
+              className={`recent-card recent-card--instance recent-card--${instance.color}`}
               key={instance.id}
-              onClick={() => onPlay(instance)}
+              role='button'
+              tabIndex={0}
+              onClick={() => onOpen(instance)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onOpen(instance);
+                }
+              }}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.06 * index }}
@@ -287,10 +298,17 @@ export function HomePage({
                   {instance.version} · {instance.loader.split(" ")[0]}
                 </small>
               </span>
-              <span className="recent-card__play">
+              <button
+                className="recent-card__play"
+                aria-label={t("home.action.play")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPlay(instance);
+                }}
+              >
                 <Play size={15} fill="currentColor" />
-              </span>
-            </motion.button>
+              </button>
+            </motion.article>
           ))}
           <button className="recent-card recent-card--new" onClick={onCreate}>
             <span className="recent-card__icon">

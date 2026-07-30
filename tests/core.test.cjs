@@ -171,7 +171,7 @@ test.after(async () => {
   await fsp.rm(temporaryRoot, { recursive: true, force: true });
 });
 
-test("Maven-координаты преобразуются в официальный путь библиотеки", () => {
+test("Maven coordinates are converted to the official library path", () => {
   const artifact = mavenArtifact(
     "org.example:demo:1.2.3:natives-windows",
     "https://repo.example/",
@@ -186,7 +186,7 @@ test("Maven-координаты преобразуются в официаль�
   );
 });
 
-test("Правила Mojang учитывают ОС, архитектуру и флаги запуска", () => {
+test("Mojang rules account for the OS, architecture, and launch flags", () => {
   const windows = { platform: "win32", arch: "x64", version: "10.0" };
   const linux = { platform: "linux", arch: "x64", version: "6.12" };
   assert.equal(
@@ -220,7 +220,7 @@ test("Правила Mojang учитывают ОС, архитектуру и �
   );
 });
 
-test("Профиль Modrinth выбирает загрузчик и версию Minecraft", () => {
+test("A Modrinth profile selects the loader and Minecraft version", () => {
   assert.deepEqual(
     profileFromDependencies({
       minecraft: "1.21.1",
@@ -245,7 +245,7 @@ test("Профиль Modrinth выбирает загрузчик и верси�
   );
 });
 
-test("Распаковщик не выпускает файлы за пределы инстанса", () => {
+test("The extractor does not write files outside the instance", () => {
   const root = path.join(temporaryRoot, "instance");
   assert.equal(
     safeDestination(root, "mods/example.jar"),
@@ -254,7 +254,7 @@ test("Распаковщик не выпускает файлы за преде�
   assert.throws(() => safeDestination(root, "../../outside.txt"));
   assert.throws(() => safeChild(root, "../outside"));
 });
-test("Платформенный слой выбирает корректные имена и каталоги", () => {
+test("The platform layer selects the correct names and directories", () => {
   assert.equal(minecraftOsName("win32"), "windows");
   assert.equal(minecraftOsName("linux"), "linux");
   assert.equal(minecraftOsName("darwin"), "osx");
@@ -274,7 +274,7 @@ test("Платформенный слой выбирает корректные 
   );
 });
 
-test("Java runtime распаковывается из Linux tar.gz", async () => {
+test("The Java runtime is extracted from a Linux tar.gz archive", async () => {
   const archivePath = path.join(temporaryRoot, "runtime.tar.gz");
   const destination = path.join(temporaryRoot, "runtime");
   const pack = tar.pack();
@@ -296,7 +296,7 @@ test("Java runtime распаковывается из Linux tar.gz", async () =
   );
 });
 
-test("Некорректный ответ авторизации даёт понятную ошибку вместо SyntaxError", async () => {
+test("An invalid authorization response produces a clear error instead of SyntaxError", async () => {
   const endpoint = "https://login.live.com/oauth20_token.srf";
   await assert.rejects(
     readJsonResponse(
@@ -306,7 +306,7 @@ test("Некорректный ответ авторизации даёт пон
       }),
       endpoint,
     ),
-    /login\.live\.com вернул неожиданный ответ вместо JSON \(502, text\/html\)/,
+    /login\.live\.com returned an unexpected response instead of JSON \(502, text\/html\)/,
   );
   assert.deepEqual(
     await readJsonResponse(
@@ -328,7 +328,7 @@ test("Некорректный ответ авторизации даёт пон
   );
 });
 
-test("Microsoft OAuth использует актуальный consumer flow Prism", () => {
+test("Microsoft OAuth uses the current Prism consumer flow", () => {
   assert.equal(
     DEFAULT_CLIENT_ID,
     "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb",
@@ -355,7 +355,7 @@ test("Microsoft OAuth использует актуальный consumer flow Pr
   });
 });
 
-test("Без системного keyring refresh-токен остаётся только в памяти", async () => {
+test("Without a system keyring, the refresh token remains in memory only", async () => {
   const authRoot = path.join(temporaryRoot, "volatile-auth");
   const service = new AuthService(authRoot);
   if (service.encryptionAvailable()) return;
@@ -371,7 +371,52 @@ test("Без системного keyring refresh-токен остаётся т
   await assert.rejects(fsp.stat(path.join(authRoot, "account.json")));
 });
 
-test("Refresh-токены от другого OAuth-клиента требуют повторного входа", async () => {
+test('An offline account gets a UUID, launches without a token, and stores a skin', async () => {
+  const authRoot = path.join(temporaryRoot, 'offline-auth');
+  const skinPath = path.join(authRoot, 'skin.png');
+  const service = new AuthService(authRoot);
+  service.encryptionAvailable = () => false;
+
+  const profile = await service.addOfflineAccount('Player_One');
+  assert.equal(profile.kind, 'offline');
+  assert.equal(profile.uuid, '0e0c6371-8599-3a43-a117-30cb7e62c579');
+  assert.deepEqual(await service.getLaunchAccount(), {
+    name: 'Player_One',
+    uuid: '0e0c637185993a43a11730cb7e62c579',
+    accessToken: '0',
+    userType: 'legacy',
+    xuid: '',
+    clientId: '',
+  });
+
+  const skin = Buffer.alloc(24);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(skin, 0);
+  skin.write('IHDR', 12, 'ascii');
+  skin.writeUInt32BE(64, 16);
+  skin.writeUInt32BE(64, 20);
+  await fsp.writeFile(skinPath, skin);
+
+  const withSkin = await service.setSkinFromFile(skinPath, 'slim');
+  assert.equal(withSkin.skins[0].variant, 'slim');
+  assert.match(withSkin.skins[0].url, /^data:image\/png;base64,/);
+
+  const second = await service.addOfflineAccount('Player_Two');
+  await service.switchAccount(profile.uuid);
+  const secondWithSkin = await service.setSkinFromFile(
+    skinPath,
+    'classic',
+    second.uuid,
+  );
+  assert.equal(secondWithSkin.skins[0].variant, 'classic');
+  assert.equal((await service.getProfile()).uuid, profile.uuid);
+  await assert.rejects(service.addOfflineAccount('two words'));
+
+  const restarted = new AuthService(authRoot);
+  restarted.encryptionAvailable = () => false;
+  assert.equal((await restarted.getProfile()).name, 'Player_One');
+});
+
+test("Refresh tokens from a different OAuth client require signing in again", async () => {
   const service = new AuthService(temporaryRoot);
   assert.equal(service.sameClientId(CLIENT_ID.toUpperCase(), CLIENT_ID), true);
   assert.equal(service.sameClientId("00000000402b5328", CLIENT_ID), false);
@@ -384,11 +429,11 @@ test("Refresh-токены от другого OAuth-клиента требую
   });
   await assert.rejects(
     service.getLaunchAccount(),
-    /Аккаунт сохранён старой схемой Microsoft OAuth/,
+    /The account uses a legacy Microsoft OAuth format/,
   );
 });
 
-test("Выбор файла обновления исключает dev-артефакты и чужие CDN", () => {
+test("Update file selection excludes development artifacts and third-party CDNs", () => {
   const file = selectVersionFile({
     files: [
       {
@@ -413,7 +458,7 @@ test("Выбор файла обновления исключает dev-арте
   );
 });
 
-test("Анализ журнала превращает типовые падения в понятные действия", () => {
+test("Log analysis turns common crashes into actionable guidance", () => {
   const diagnoses = analyzeMinecraftLog(`
     java.lang.OutOfMemoryError: Java heap space
     org.spongepowered.asm.mixin.transformer.throwables.MixinApplyError
@@ -439,7 +484,7 @@ test("Анализ журнала превращает типовые паден
   assert.equal(analyzeMinecraftLog("Game started normally").length, 0);
 });
 
-test("История модов откатывает обновление и сохраняет текущий файл", async () => {
+test("Mod history rolls back an update and preserves the current file", async () => {
   const instancesRoot = path.join(temporaryRoot, "history-instances");
   const instanceId = "history-instance";
   const instanceRoot = path.join(instancesRoot, instanceId);
@@ -501,7 +546,7 @@ test("История модов откатывает обновление и с�
   );
 });
 
-test("Guard находит моды после последнего удачного запуска и отключает их", async () => {
+test("Guard finds mods added since the last successful launch and disables them", async () => {
   const instancesRoot = path.join(temporaryRoot, "guard-instances");
   const instanceId = "guard-instance";
   const instanceRoot = path.join(instancesRoot, instanceId);
@@ -541,7 +586,7 @@ test("Guard находит моды после последнего удачно
   );
 });
 
-test("AutoTune учитывает количество модов и не забирает всю память", () => {
+test("AutoTune accounts for the mod count without consuming all memory", () => {
   assert.equal(requiredJavaForMinecraft("1.16.5"), 8);
   assert.equal(requiredJavaForMinecraft("1.20.1"), 17);
   assert.equal(requiredJavaForMinecraft("1.20.4"), 17);
@@ -571,7 +616,7 @@ test("AutoTune учитывает количество модов и не заб
   assert.ok(constrained.memoryGiB <= constrained.safeMaximumGiB);
 });
 
-test("Резервная копия Onyx переносит миры, настройки и метаданные", async () => {
+test("An Onyx backup transfers worlds, settings, and metadata", async () => {
   const sourceRoot = path.join(temporaryRoot, "backup-source");
   const restoreRoot = path.join(temporaryRoot, "backup-restore");
   const sourceDirectory = path.join(sourceRoot, "test-instance");
@@ -591,12 +636,12 @@ test("Резервная копия Onyx переносит миры, настр
   const backup = await createInstanceBackup({
     instance: {
       id: "test-instance",
-      name: "Тестовый мир",
+      name: "Test World",
       version: "1.21.1",
       loader: "Fabric",
-      description: "Проверка",
+      description: "Test fixture",
       color: "cyan",
-      glyph: "ТМ",
+      glyph: "TW",
       installProfile: {
         minecraftVersion: "1.21.1",
         loader: "fabric",
@@ -613,7 +658,7 @@ test("Резервная копия Onyx переносит миры, настр
     instancesRoot: restoreRoot,
     instanceId: "restored-instance",
   });
-  assert.equal(imported.name, "Тестовый мир");
+  assert.equal(imported.name, "Test World");
   assert.equal(imported.status, "setup");
   assert.equal(
     await fsp.readFile(
@@ -631,7 +676,7 @@ test("Резервная копия Onyx переносит миры, настр
 });
 
 test(
-  "Загрузчик проверяет SHA-256 и повторно использует валидный файл",
+  "The downloader verifies SHA-256 and reuses a valid file",
   { timeout: 15_000 },
   async () => {
     const payload = Buffer.from("onyx-download-integrity");
@@ -672,7 +717,7 @@ test(
 );
 
 test(
-  "Отмена загрузки останавливает поток и удаляет временный файл",
+  "Cancelling a download stops the stream and deletes the temporary file",
   { timeout: 15_000 },
   async () => {
     const chunk = Buffer.alloc(64 * 1024, 7);
@@ -715,7 +760,7 @@ test(
 );
 
 test(
-  "Загрузчик продолжает проверенный файл с сохранённой позиции",
+  "The downloader resumes a verified file from the saved offset",
   { timeout: 15_000 },
   async () => {
     const payload = Buffer.from(
@@ -767,7 +812,7 @@ test(
 );
 
 test(
-  "Закрытие лаунчера сохраняет частично загруженный проверенный файл",
+  "Closing the launcher preserves a partially downloaded verified file",
   { timeout: 15_000 },
   async () => {
     const chunk = Buffer.alloc(32 * 1024, 4);
@@ -814,7 +859,7 @@ test(
 );
 
 test(
-  "Официальные метаданные Mojang и Fabric разбираются",
+  "Official Mojang and Fabric metadata is parsed",
   { timeout: 45_000 },
   async () => {
     const javaService = new JavaService(path.join(temporaryRoot, "runtimes"));
@@ -847,17 +892,17 @@ test(
   },
 );
 
-test("Установленная Java определяется и сообщает мажорную версию", async (context) => {
+test("An installed Java runtime is detected and reports its major version", async (context) => {
   const java = await findSystemJava();
   if (!java) {
-    context.skip("Java отсутствует в PATH тестовой системы");
+    context.skip("Java is not available in the test system PATH");
     return;
   }
   assert.ok(java.major >= 17);
   assert.ok(await inspectJava(java.executable));
 });
 
-test("Запуск повторно проверяет сохранённый путь Java", async () => {
+test("Launch revalidates the saved Java path", async () => {
   const calls = [];
   const service = new MinecraftService({
     sharedRoot: path.join(temporaryRoot, "java-selection-shared"),
@@ -883,7 +928,7 @@ test("Запуск повторно проверяет сохранённый п
   ]);
 });
 
-test("Повторный запуск Vanilla сохраняет resolvedVersionId и не требует переустановки", async () => {
+test("Relaunching Vanilla preserves resolvedVersionId and does not require reinstallation", async () => {
   const service = new MinecraftService({
     sharedRoot: path.join(temporaryRoot, "vanilla-reuse-shared"),
     instancesRoot: path.join(temporaryRoot, "vanilla-reuse-instances"),
@@ -915,7 +960,7 @@ test("Повторный запуск Vanilla сохраняет resolvedVersion
   assert.equal(legacy.status, "ready");
 });
 
-test("Preflight блокирует только опасные условия и помечает ремонт", () => {
+test("Preflight blocks only unsafe conditions and flags repairs", () => {
   assert.equal(
     reportStatus(
       [{ code: "disk-critical", status: "error" }],
@@ -939,7 +984,7 @@ test("Preflight блокирует только опасные условия и
   );
 });
 
-test("Preflight распознаёт устаревший путь Java без блокировки запуска", async () => {
+test("Preflight recognizes a stale Java path without blocking launch", async () => {
   const root = path.join(temporaryRoot, "preflight");
   const instanceRoot = path.join(root, "instances");
   await fsp.mkdir(instanceRoot, { recursive: true });
@@ -964,7 +1009,7 @@ test("Preflight распознаёт устаревший путь Java без �
   );
 });
 
-test("Onyx Picks содержит уникальные устанавливаемые Modrinth-слаги", () => {
+test("Onyx Picks contains unique installable Modrinth slugs", () => {
   assert.equal(PICK_DEFINITIONS.length, 5);
   assert.equal(
     new Set(PICK_DEFINITIONS.map((pick) => pick.slug)).size,
@@ -979,7 +1024,7 @@ test("Onyx Picks содержит уникальные устанавливае�
   );
 });
 
-test("Quick Join разбирает домены, порты и IPv6 без двусмысленности", () => {
+test("Quick Join parses domains, ports, and IPv6 unambiguously", () => {
   assert.deepEqual(parseServerAddress("play.example.org:25566"), {
     host: "play.example.org",
     port: 25566,
@@ -1001,7 +1046,7 @@ test("Quick Join разбирает домены, порты и IPv6 без дв
   assert.throws(() => parseServerAddress("bad host"));
 });
 
-test("Minecraft status protocol разбирает фрагментированный JSON-ответ", () => {
+test("The Minecraft status protocol parses a fragmented JSON response", () => {
   const payload = {
     version: { name: "1.21.1", protocol: 767 },
     players: { online: 12, max: 50 },
@@ -1023,7 +1068,7 @@ test("Minecraft status protocol разбирает фрагментирован�
   assert.equal(motdToText(payload.description), "Onyx Server");
 });
 
-test("Проверка сервера учитывает Minecraft DNS SRV и явный порт", async () => {
+test("The server check handles Minecraft DNS SRV and explicit ports", async () => {
   const address = parseServerAddress("play.example.org");
   const srv = await resolveMinecraftEndpoint(address, "play.example.org", {
     resolveSrvFn: async (name) => {
@@ -1049,7 +1094,7 @@ test("Проверка сервера учитывает Minecraft DNS SRV и я
     "play.example.org:25566",
     {
       resolveSrvFn: async () => {
-        throw new Error("SRV не должен запрашиваться");
+        throw new Error("SRV should not be queried");
       },
     },
   );
@@ -1060,7 +1105,7 @@ test("Проверка сервера учитывает Minecraft DNS SRV и я
   });
 });
 
-test("Guard находит одинаковый внутренний ID в разных mod JAR", async () => {
+test("Guard finds duplicate internal IDs across mod JARs", async () => {
   const instanceDirectory = path.join(temporaryRoot, "duplicate-mods");
   const modsDirectory = path.join(instanceDirectory, "mods");
   await writeTestJar(path.join(modsDirectory, "first.jar"), {
@@ -1441,11 +1486,11 @@ test("Mod profiles save and apply mod states without touching new mods", async (
   const profile = await saveModProfile({
     instancesRoot,
     instanceId,
-    name: "  FPS   набор  ",
+    name: "  FPS   preset  ",
     now: () => new Date("2026-07-29T10:00:00.000Z"),
     idFactory: () => "11111111-1111-4111-8111-111111111111",
   });
-  assert.equal(profile.name, "FPS набор");
+  assert.equal(profile.name, "FPS preset");
   assert.equal(profile.modCount, 3);
   assert.equal(profile.enabledCount, 2);
   const initialProfiles = await listModProfiles({
@@ -1541,7 +1586,7 @@ test("Mod profile application rolls back partial file changes", async () => {
         await fsp.rename(source, destination);
       },
     }),
-    /изменения отменены/,
+    /changes were rolled back/,
   );
   assert.equal(
     await fsp.readFile(path.join(modsDirectory, "one.jar.disabled"), "utf8"),

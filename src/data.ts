@@ -2,6 +2,7 @@ import {
   Compass,
   Download,
   Home,
+  ImageIcon,
   Library,
   Settings,
 } from "lucide-react";
@@ -17,6 +18,7 @@ export const navigation: Array<{
   { id: "library", labelKey: "nav.library", icon: Library },
   { id: "discover", labelKey: "nav.discover", icon: Compass },
   { id: "downloads", labelKey: "nav.downloads", icon: Download },
+  { id: "skins", labelKey: "nav.skins", icon: ImageIcon },
 ];
 
 export const fallbackProjects: CatalogProject[] = [
@@ -27,7 +29,7 @@ export const fallbackProjects: CatalogProject[] = [
     author: "LunaPixelStudios",
     title: "Prominence II: Hasturian Era",
     description:
-      "Большое RPG-приключение с продуманной прогрессией, боссами и сотнями квестов.",
+      "A large RPG adventure with thoughtful progression, bosses, and hundreds of quests.",
     categories: ["fabric", "adventure", "magic"],
     versions: ["1.20.1"],
     downloads: 8_750_000,
@@ -46,7 +48,7 @@ export const fallbackProjects: CatalogProject[] = [
     author: "Cobblemon",
     title: "Cobblemon",
     description:
-      "Исследование мира, коллекционирование существ и тактические сражения.",
+      "World exploration, creature collecting, and tactical battles.",
     categories: ["fabric", "adventure", "multiplayer"],
     versions: ["1.21.1"],
     downloads: 6_420_000,
@@ -65,7 +67,7 @@ export const fallbackProjects: CatalogProject[] = [
     author: "Community",
     title: "Create: Perfect World",
     description:
-      "Инженерная песочница: механизмы, фабрики, поезда и красивое строительство.",
+      "An engineering sandbox with contraptions, factories, trains, and creative building.",
     categories: ["forge", "technology", "optimization"],
     versions: ["1.20.1"],
     downloads: 3_180_000,
@@ -84,7 +86,7 @@ export const fallbackProjects: CatalogProject[] = [
     author: "Onyx Picks",
     title: "Vanilla, Perfected",
     description:
-      "Нативное ощущение Minecraft с быстрым рендером и аккуратными улучшениями.",
+      "The familiar Minecraft experience with fast rendering and carefully chosen enhancements.",
     categories: ["fabric", "lightweight", "optimization"],
     versions: ["1.21.1"],
     downloads: 1_940_000,
@@ -101,16 +103,16 @@ export const fallbackProjects: CatalogProject[] = [
 export const updateFeed = [
   {
     id: 1,
-    category: "ОБНОВЛЕНИЕ",
-    title: "Каталог версий обновляется автоматически",
-    text: "Релизы и снапшоты приходят напрямую из манифеста Mojang.",
+    category: "UPDATE",
+    title: "The version catalog updates automatically",
+    text: "Releases and snapshots come directly from the Mojang manifest.",
     tone: "lime",
   },
   {
     id: 2,
-    category: "ПОДБОРКА",
-    title: "5 сборок для уютного выживания",
-    text: "Фермерство, декор и спокойное исследование.",
+    category: "CURATED",
+    title: "5 modpacks for cozy survival",
+    text: "Farming, decoration, and relaxed exploration.",
     tone: "violet",
   },
 ];

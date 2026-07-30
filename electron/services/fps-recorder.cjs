@@ -2,6 +2,65 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { fetchJson, downloadFile } = require('./network.cjs');
+
+const PRESENTMON_RELEASE_ENDPOINT =
+  'https://api.github.com/repos/GameTechDev/PresentMon/releases/latest';
+const PRESENTMON_ASSET_NAME = /^PresentMon(?:-[A-Za-z0-9._-]+)?-x64\.exe$/i;
+
+function selectPresentMonAsset(release) {
+  const asset = Array.isArray(release?.assets)
+    ? release.assets.find((candidate) => {
+        if (!PRESENTMON_ASSET_NAME.test(String(candidate?.name || ''))) {
+          return false;
+        }
+        const url = String(candidate?.browser_download_url || '');
+        try {
+          const parsed = new URL(url);
+          return (
+            parsed.protocol === 'https:' &&
+            parsed.hostname === 'github.com' &&
+            parsed.pathname.startsWith(
+              '/GameTechDev/PresentMon/releases/download/',
+            )
+          );
+        } catch {
+          return false;
+        }
+      })
+    : null;
+  if (!asset || !Number.isFinite(Number(asset.size)) || asset.size < 1) {
+    throw new Error('The official PresentMon release does not contain an x64 binary');
+  }
+  if (Number(asset.size) > 200 * 1024 * 1024) {
+    throw new Error('The PresentMon file from the official release is too large');
+  }
+  return asset;
+}
+
+async function installPresentMon({
+  destination,
+  onProgress,
+  fetchRelease = fetchJson,
+  download = downloadFile,
+} = {}) {
+  if (!destination) throw new Error('The PresentMon installation path was not provided');
+  const release = await fetchRelease(PRESENTMON_RELEASE_ENDPOINT);
+  const asset = selectPresentMonAsset(release);
+  const digest = String(asset.digest || '');
+  const sha256 = /^sha256:([a-f0-9]{64})$/i.exec(digest)?.[1];
+  await download({
+    url: asset.browser_download_url,
+    destination,
+    size: Number(asset.size),
+    sha256,
+    onProgress,
+  });
+  return {
+    destination,
+    version: String(release.tag_name || asset.name),
+  };
+}
 
 function executableCandidates(name, { platform = process.platform, env = process.env } = {}) {
   const extensions =
@@ -39,6 +98,7 @@ async function firstExecutable(candidates, platform = process.platform) {
 async function detectFpsRecorder({
   platform = process.platform,
   env = process.env,
+  presentMonPath = null,
 } = {}) {
   if (platform === "linux") {
     const executable = await firstExecutable(
@@ -66,6 +126,7 @@ async function detectFpsRecorder({
     const executable = await firstExecutable(
       [
         env.ONYX_PRESENTMON_PATH,
+        presentMonPath,
         ...executableCandidates("PresentMon.exe", { platform, env }),
         programFiles && path.join(programFiles, "Intel", "PresentMon", "PresentMon.exe"),
         programFiles && path.join(programFiles, "PresentMon", "PresentMon.exe"),
@@ -81,6 +142,7 @@ async function detectFpsRecorder({
       executable,
       platform,
       installHint: "PresentMon",
+      installable: !executable,
     };
   }
 
@@ -91,6 +153,7 @@ async function detectFpsRecorder({
     executable: null,
     platform,
     installHint: null,
+    installable: false,
   };
 }
 
@@ -307,12 +370,14 @@ class FpsRecorder {
     outputDirectory,
     platform = process.platform,
     env = process.env,
+    presentMonPath = null,
     sampleIntervalMs = 500,
   }) {
     this.enabled = Boolean(enabled);
     this.outputDirectory = outputDirectory;
     this.platform = platform;
     this.env = env;
+    this.presentMonPath = presentMonPath;
     this.sampleIntervalMs = sampleIntervalMs;
     this.status = null;
     this.presentMon = null;
@@ -325,6 +390,7 @@ class FpsRecorder {
     this.status = await detectFpsRecorder({
       platform: this.platform,
       env: this.env,
+      presentMonPath: this.presentMonPath,
     });
     if (!this.status.available) {
       return { wrapper: null, status: this.status };
@@ -457,6 +523,9 @@ class FpsRecorder {
 }
 
 module.exports = {
+  PRESENTMON_RELEASE_ENDPOINT,
+  selectPresentMonAsset,
+  installPresentMon,
   detectFpsRecorder,
   parseCsvLine,
   parseFpsCsv,

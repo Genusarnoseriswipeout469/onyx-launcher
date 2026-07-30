@@ -139,7 +139,7 @@ export function LauncherOverlay({
                           ? t("guard.eyebrow")
                       : t("launch.preLaunch")}
                   </p>
-                  <h2>{launch.instance.id === "vanilla-start" && launch.instance.name === "Чистая игра" ? t("home.defaultName") : launch.instance.name}</h2>
+                  <h2>{launch.instance.id === "vanilla-start" && launch.instance.name === "Pure Game" ? t("home.defaultName") : launch.instance.name}</h2>
                   <span>
                     Minecraft {launch.instance.version} · {launch.instance.loader}
                   </span>
@@ -349,7 +349,7 @@ export function LauncherOverlay({
             )}
           </span>
           <span>
-            <strong>{launch.instance.id === "vanilla-start" && launch.instance.name === "Чистая игра" ? t("home.defaultName") : launch.instance.name}</strong>
+            <strong>{launch.instance.id === "vanilla-start" && launch.instance.name === "Pure Game" ? t("home.defaultName") : launch.instance.name}</strong>
             <small>{message}</small>
           </span>
           <i>

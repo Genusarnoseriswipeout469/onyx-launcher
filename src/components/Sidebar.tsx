@@ -103,11 +103,13 @@ export function Sidebar({
             <i />
           </span>
           <span className="profile-card__copy">
-            <strong>{profile.name === "Игрок" ? t("profile.player") : profile.name}</strong>
+            <strong>{profile.name === "Player" ? t("profile.player") : profile.name}</strong>
             <small>
               {profile.kind === "microsoft"
                 ? t("profile.microsoft")
-                : t("profile.local")}
+                : profile.kind === 'offline'
+                  ? t('profile.offline')
+                  : t('profile.local')}
             </small>
           </span>
           <ChevronDown size={15} />

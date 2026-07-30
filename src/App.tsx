@@ -62,6 +62,11 @@ const DownloadsPage = lazy(() =>
     default: module.DownloadsPage,
   })),
 );
+const SkinsPage = lazy(() =>
+  import("./pages/SkinsPage").then((module) => ({
+    default: module.SkinsPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((module) => ({
     default: module.SettingsPage,
@@ -74,7 +79,7 @@ const InstancePage = lazy(() =>
 );
 
 export default function App() {
-  const { locale, setLocale, t } = useI18n();
+  const { locale, t } = useI18n();
   const [state, setState] = useState<LauncherState | null>(null);
   const [route, setRoute] = useState<RouteId>("home");
   const [instanceReturnRoute, setInstanceReturnRoute] =
@@ -383,9 +388,6 @@ export default function App() {
       ? "reduced"
       : "full";
   }, [state?.settings.reducedMotion]);
-  useEffect(() => {
-    if (state?.settings.language) setLocale(state.settings.language);
-  }, [setLocale, state?.settings.language]);
 
   async function checkInstance(instance: GameInstance) {
     setInstanceMenu(null);
@@ -1171,6 +1173,16 @@ export default function App() {
             }
           />
         );
+      case "skins":
+        return (
+          <SkinsPage
+            profile={state.profile}
+            onAccount={() => setAccountOpen(true)}
+            onNotify={(tone, title, message) =>
+              pushToast(tone, title, message, 6200)
+            }
+          />
+        );
       default:
         return (
           <HomePage
@@ -1179,6 +1191,7 @@ export default function App() {
             profileName={state.profile.name}
             onNavigate={setRoute}
             onPlay={(instance) => void play(instance)}
+            onOpen={openInstance}
             onCreate={() => setCreateOpen(true)}
             onConfigure={setSettingsInstance}
           />
@@ -1290,7 +1303,6 @@ export default function App() {
         open={onboardingOpen}
         profile={state.profile}
         onAccount={() => setAccountOpen(true)}
-        onLanguageChange={async (language) => updateSettings({ language })}
         onFinish={async (memory) => {
           await updateSettings({ memory, onboardingComplete: true });
           setOnboardingOpen(false);

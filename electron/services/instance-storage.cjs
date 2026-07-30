@@ -44,11 +44,11 @@ function instanceDirectory(instancesRoot, instanceId) {
   const root = path.resolve(instancesRoot);
   const id = String(instanceId || "");
   if (!/^[a-zA-Z0-9_-]{1,96}$/.test(id)) {
-    throw new Error("Некорректный идентификатор инстанса");
+    throw new Error("Invalid instance ID");
   }
   const directory = path.resolve(root, id);
   if (!directory.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Небезопасный путь инстанса");
+    throw new Error("Unsafe instance path");
   }
   return directory;
 }

@@ -14,7 +14,7 @@ function safeChild(root, child) {
     destination === rootPath ||
     !destination.startsWith(`${rootPath}${path.sep}`)
   ) {
-    throw new Error("Небезопасный путь инстанса");
+    throw new Error("Unsafe instance path");
   }
   return destination;
 }
@@ -86,7 +86,7 @@ async function createInstanceBackup({
   const source = safeChild(instancesRoot, instance.id);
   const stat = await fsp.stat(source).catch(() => null);
   if (!stat?.isDirectory()) {
-    throw new Error("Папка инстанса ещё не создана");
+    throw new Error("The instance folder has not been created yet");
   }
   const totals = await directoryStats(source);
   await fsp.mkdir(path.dirname(destination), { recursive: true });
@@ -143,7 +143,7 @@ async function createInstanceBackup({
 
 function cleanImportedInstance(manifest, instanceId) {
   const source = manifest?.instance || {};
-  const name = String(source.name || "Импортированный инстанс").slice(0, 48);
+  const name = String(source.name || "Imported instance").slice(0, 48);
   const sourceSettings =
     source.settings && typeof source.settings === "object"
       ? source.settings
@@ -176,7 +176,7 @@ function cleanImportedInstance(manifest, instanceId) {
     version: String(source.version || "1.21.1"),
     loader: String(source.loader || "Vanilla"),
     description: String(
-      source.description || "Инстанс из резервной копии Onyx",
+      source.description || "Instance restored from an Onyx backup",
     ).slice(0, 180),
     color: ["lime", "amber", "violet", "cyan", "rose"].includes(source.color)
       ? source.color
@@ -193,7 +193,7 @@ function cleanImportedInstance(manifest, instanceId) {
     settings: importedSettings,
     favorite: false,
     status: "setup",
-    lastPlayed: "Ещё не запускался",
+    lastPlayed: "Never played",
     playtimeMinutes: 0,
     modCount: 0,
     importedAt: new Date().toISOString(),
@@ -211,7 +211,7 @@ async function importInstanceBackup({
     manifest?.launcher !== "onyx" ||
     manifest?.formatVersion !== BACKUP_FORMAT_VERSION
   ) {
-    throw new Error("Это не поддерживаемая резервная копия Onyx");
+    throw new Error("This is not a supported Onyx backup");
   }
 
   const destination = safeChild(instancesRoot, instanceId);

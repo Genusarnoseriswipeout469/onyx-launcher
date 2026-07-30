@@ -65,7 +65,7 @@ export function TargetInstanceModal({
                     )}
                   </span>
                   <div>
-                    <strong>{instance.id === "vanilla-start" && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name}</strong>
+                    <strong>{instance.id === "vanilla-start" && instance.name === "Pure Game" ? t("home.defaultName") : instance.name}</strong>
                     <small>
                       Minecraft {instance.version} · {instance.loader}
                     </small>

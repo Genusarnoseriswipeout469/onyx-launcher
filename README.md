@@ -1,214 +1,189 @@
-# Onyx Launcher 1.6
+# Onyx Launcher
 
-Современный кроссплатформенный лаунчер Minecraft для Windows и Linux на
-Electron, React и TypeScript. Onyx
-управляет независимыми игровыми инстансами, устанавливает официальные файлы
-Minecraft, загрузчики модов, моды и сборки Modrinth, а затем формирует и
-запускает корректную Java-команду.
+A modern, English-only Minecraft launcher for Windows and Linux, built with Electron, React, and TypeScript. Onyx keeps game instances isolated, installs official Minecraft files and popular mod loaders, integrates with Modrinth, and launches every instance with its own Java and performance settings.
 
-## Возможности
+[Download the latest release](../../releases/latest) · [Report a bug](../../issues)
 
-### Minecraft
+## Screenshots
 
-- релизы и снапшоты из официального манифеста Mojang;
-- Vanilla, Fabric, Quilt, Forge и NeoForge;
-- общие кэши библиотек и ассетов без лишних копий между инстансами;
-- автоматический подбор и установка Eclipse Temurin Java 8, 17 или 21;
-- проверка SHA-1, SHA-256 и SHA-512 у загружаемых файлов;
-- официальный демо-режим без Microsoft-аккаунта;
-- отдельные память, разрешение, fullscreen, Java и JVM-аргументы для каждого
-  инстанса;
-- Onyx AutoTune с безопасной рекомендацией памяти и версии Java;
-- Quick Join с адресом сервера на уровне инстанса и ручной проверкой онлайна,
-  пинга, версии и числа игроков;
-- запуск, остановка, прогресс установки и живой журнал процесса;
-- диагностика типовых падений: память, Java, зависимости, mixin-конфликты,
-  драйверы, авторизация и свободное место.
+| Home | Library |
+| --- | --- |
+| ![Onyx Launcher home screen](artifacts/home.png) | ![Minecraft instance library](artifacts/library.png) |
 
-### Инстансы и безопасность данных
+| Discover | Onyx Picks |
+| --- | --- |
+| ![Modrinth discovery catalog](artifacts/discover.png) | ![Curated Onyx Picks modpacks](artifacts/onyx-picks.png) |
 
-- полноценная страница каждого инстанса: состояние, сессии, контент, серверы и быстрые действия;
-- несколько серверов на инстанс с выбором Quick Join, Minecraft status ping и DNS SRV;
-- Ghost Mode полностью выгружает окно, WebContents и GPU-процесс Onyx на время игры;
-- Crash Bisect автоматически делит набор модов пополам и за несколько запусков находит вероятный конфликт;
-- World Guard делает ручные и автоматические снимки миров с безопасным восстановлением;
-- Update Preview показывает добавленные, изменённые и удаляемые файлы сборки до установки;
-- Onyx Sync переносит настройки, серверы и точные версии Modrinth-модов через `.onyxprofile` без облака;
-- Flight Recorder записывает RAM, CPU, время старта, GC-паузы и автоматически разбирает производительность каждой сессии;
-- опциональная запись FPS добавляет средний FPS, 1% Low, P99 времени кадра, фризы и отдельный график: через скрытый MangoHud на Linux или PresentMon на Windows;
-- эталон производительности сравнивает любой закреплённый запуск с новыми сессиями по FPS, 1% Low, памяти и времени старта и формирует копируемый отчёт;
-- создание, дублирование, избранное и безопасное удаление через системную корзину;
-- Onyx Guard: проверка Java, файлов, памяти, диска и каталога перед запуском;
-- сканирование внутренних ID Fabric, Quilt, Forge и NeoForge-модов с
-  предупреждением о дубликатах до запуска;
-- безопасный повторный запуск после падения с отключением модов, добавленных
-  после последней успешной игровой сессии;
-- полная проверка и восстановление игровых библиотек;
-- резервные копии `.onyxpack` с мирами, модами и настройками;
-- восстановление `.onyxpack` на другой установке Onyx;
-- автоматическая точка восстановления перед обновлением сборки;
-- безопасный перенос всех инстансов в новую папку с откатом при ошибке;
-- отдельное управление модами, ресурспаками и шейдерами;
-- профили модов сохраняют состояние включённых и выключенных файлов внутри
-  инстанса и безопасно переключают наборы с транзакционным откатом;
-- анализатор хранилища показывает размер миров, модов, ресурсов, конфигов,
-  журналов и остальных данных, а безопасная очистка сохраняет свежие отчёты;
-- включение и отключение контента без удаления файлов;
-- «машина времени» обновлений модов с постоянной историей и откатом.
+| Instance details | Settings |
+| --- | --- |
+| ![Minecraft instance details and performance](artifacts/instance.png) | ![Onyx Launcher settings](artifacts/settings.png) |
 
-### Modrinth
+| Profiles and skins |
+| --- |
+| ![Minecraft profiles and skins](artifacts/profiles-and-skins.png) |
 
-- живой каталог сборок и модов;
-- Onyx Picks — отдельная витрина отобранных сборок с фильтрами по стилю игры,
-  памяти и кнопкой случайного выбора;
-- поиск, версии Minecraft, загрузчики, сортировка и пагинация;
-- полная установка `.mrpack`: `overrides`, `client-overrides`, контент и
-  зависимости;
-- импорт локального `.mrpack`;
-- рекурсивная установка обязательных зависимостей модов;
-- поиск и установка обновлений модов;
-- поиск обновлений сборок с сохранением пользовательских данных;
-- продолжение прерванных загрузок через HTTP Range после перезапуска;
-- отмена активных загрузок с удалением временных `.part`-файлов.
+All screenshots are generated from the current English UI with `npm run capture:screenshots`.
 
-### Аккаунты и интерфейс
+## Highlights
 
-- безопасный Microsoft/Xbox device-code flow без передачи пароля лаунчеру;
-- проверка лицензии Minecraft: Java Edition;
-- несколько сохранённых Microsoft-аккаунтов и быстрое переключение;
-- шифрование refresh-токенов через системный `safeStorage`; без доступного
-  keyring токен не сохраняется на диск;
-- onboarding с автоматической диагностикой и рекомендацией памяти;
-- русский и английский интерфейс;
-- command palette с клавиатурной навигацией;
-- три акцентные темы и режим уменьшенного движения;
-- центр здоровья Mojang, Microsoft, Modrinth, Java, памяти и диска;
-- экспорт диагностического JSON без токенов;
-- копирование очищенного отчёта о падении без токенов и домашних путей;
-- ZIP-пакет диагностики для друга или баг-репорта: очищенный журнал, сведения
-  об инстансе, последних сессиях и системе без аккаунта, серверов, IP и email;
-- реальная статистика игровых сессий и памяти всех процессов Onyx;
-- crash-screen renderer-процесса без риска для игровых данных.
+### Minecraft and Java
 
-## Разработка
+- Official Mojang release and snapshot manifests.
+- Vanilla, Fabric, Quilt, Forge, and NeoForge support.
+- Shared asset and library caches without duplicating files between instances.
+- Automatic Eclipse Temurin Java 8, 17, or 21 selection and installation.
+- SHA-1, SHA-256, and SHA-512 verification for downloaded files.
+- Official Minecraft demo mode without a Microsoft account.
+- Per-instance memory, resolution, fullscreen, Java, JVM arguments, and Quick Join settings.
+- Onyx AutoTune recommendations based on system memory, Java, and mod count.
+- Launch progress, process controls, live logs, and actionable crash diagnostics.
 
-Требуются Node.js 22+ и Windows 10/11 либо современный x64-дистрибутив Linux.
+### Instances and data safety
 
-```powershell
-npm install
+- Dedicated instance pages for health, sessions, content, servers, storage, and actions.
+- Multiple saved servers per instance, DNS SRV support, status checks, and Quick Join.
+- Ghost Mode releases the launcher window, WebContents, and GPU process while playing.
+- Crash Bisect narrows a suspected mod conflict across controlled test launches.
+- World Guard creates manual and automatic world snapshots with safe restoration.
+- Update Preview shows added, changed, and removed modpack files before installation.
+- Onyx Sync exports reproducible settings and exact Modrinth mod versions to `.onyxprofile`.
+- Flight Recorder tracks memory, CPU, startup, GC pauses, and per-session performance.
+- Optional FPS recording through hidden MangoHud on Linux or PresentMon on Windows.
+- Performance baselines compare FPS, 1% lows, memory, and startup time between sessions.
+- Safe deletion through the operating-system trash, `.onyxpack` backups, and repair tools.
+- Transactional mod profiles, mod update history, storage analysis, and safe cleanup.
+- Safe instance-directory migration with verification and rollback.
+
+### Modrinth and accounts
+
+- Searchable Modrinth modpack and mod catalog with filters and pagination.
+- Curated Onyx Picks with play-style and memory filters.
+- Complete `.mrpack` installation, local import, dependency resolution, and updates.
+- Resumable HTTP downloads with cancellation and partial-file cleanup.
+- Microsoft/Xbox device-code sign-in without exposing the account password to Onyx.
+- Minecraft: Java Edition entitlement checks and multiple saved Microsoft accounts.
+- Offline accounts and per-profile skin management.
+- Refresh-token encryption through Electron `safeStorage`; tokens remain memory-only when secure storage is unavailable.
+
+## Install
+
+Download an installer or portable archive from the [latest GitHub Release](../../releases/latest):
+
+- Windows x64: NSIS installer or portable `.exe`.
+- Linux x64: AppImage or portable `.tar.gz`.
+- `SHA256SUMS-windows.txt` and `SHA256SUMS-linux.txt` are attached to every automated release.
+
+Windows builds are unsigned unless a maintainer configures a code-signing certificate, so SmartScreen may display a warning.
+
+## Development
+
+Requirements:
+
+- Node.js 22 or newer.
+- Windows 10/11 x64 or a modern x64 Linux distribution.
+
+```bash
+npm ci
 npm run dev
 ```
 
-Проверки:
+Run the complete local verification suite:
 
-```powershell
+```bash
+npm run check
+```
+
+Individual commands are also available:
+
+```bash
 npm run typecheck
 npm run lint
 npm test
 npm run build:renderer
 ```
 
-## Windows-релиз
-
-```powershell
-npm run dist
-```
-
-В `release/` будут созданы:
-
-- NSIS-установщик с выбором папки;
-- portable `.exe`;
-- распакованный каталог для smoke-тестов.
-
-Для публичного распространения рекомендуется указать сертификат подписи кода
-через стандартные переменные `electron-builder`. Без сертификата Windows
-SmartScreen может показать предупреждение.
-
-## Linux-релиз
+Regenerate every README screenshot from a deterministic local fixture:
 
 ```bash
+npm run capture:screenshots
+```
+
+## Automated releases
+
+The repository uses two GitHub Actions workflows:
+
+- `CI` validates pull requests and pushes to non-release branches.
+- `Automatic release` runs after every push to `main` or `master`.
+
+A successful release workflow:
+
+1. installs locked dependencies with `npm ci` and runs `npm run check`;
+2. increments the patch version in `package.json` and `package-lock.json`;
+3. commits the version as `chore(release): vX.Y.Z` and creates the matching Git tag;
+4. builds Windows and Linux x64 packages on native runners;
+5. generates SHA-256 checksum files and publishes a GitHub Release with generated notes.
+
+For the first GitHub push, set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**. If the release branch is protected, allow `github-actions[bot]` to push the release commit and tag. The workflow-created commit does not start another release, preventing a version-bump loop.
+
+## Local packaging
+
+```bash
+# Windows NSIS installer and portable executable
+npm run dist:windows
+
+# Linux AppImage
+npm run dist:linux
+
+# Linux portable tar.gz
 npm run dist:linux:archive
 ```
 
-Команда создаёт переносимый `Onyx-Launcher-1.6.0-linux-x64.tar.gz`.
-После распаковки запустите `launch-onyx.sh`; скрипт выставит необходимые права
-для исполняемых файлов. Также доступна сборка AppImage:
+Build output is written to `release/` and is intentionally excluded from Git.
 
-```bash
-npm run dist:linux
-```
+## Data locations
 
-Запись FPS выключена по умолчанию и включается отдельно в настройках инстанса.
-На Arch Linux для неё достаточно `sudo pacman -S mangohud`; видимый оверлей
-Onyx не включает. Если MangoHud не установлен, игра запускается как обычно.
+On Windows:
 
-## Хранение данных
-
-- состояние интерфейса: `%APPDATA%\onyx-launcher\state.json`;
-- зашифрованные аккаунты: `%APPDATA%\onyx-launcher\account.json`;
-- игровые инстансы: `%APPDATA%\.onyx\instances`;
-- общие ассеты и библиотеки: `%APPDATA%\.onyx\shared`;
+- launcher state: `%APPDATA%\onyx-launcher\state.json`;
+- encrypted accounts: `%APPDATA%\onyx-launcher\account.json`;
+- instances: `%APPDATA%\.onyx\instances`;
+- shared assets and libraries: `%APPDATA%\.onyx\shared`;
 - Java runtimes: `%APPDATA%\.onyx\runtimes`;
-- кэш сборок: `%APPDATA%\.onyx\packs`;
-- автоматические бэкапы обновлений: `%APPDATA%\.onyx\backups`.
+- modpack cache: `%APPDATA%\.onyx\packs`;
+- update backups: `%APPDATA%\.onyx\backups`.
 
-На Linux данные хранятся по XDG: состояние — в
-`~/.config/onyx-launcher`, игровые данные — в `~/.local/share/onyx`.
-Существующая папка `~/.config/.onyx` автоматически распознаётся как legacy,
-поэтому старые инстансы не теряются.
+On Linux, launcher state follows XDG under `~/.config/onyx-launcher`, while game data is stored in `~/.local/share/onyx`. A legacy `~/.config/.onyx` data directory is detected automatically.
 
-Путь инстансов можно изменить в настройках. Onyx сначала полностью копирует и
-проверяет данные, переключает рабочую папку только после успеха и сохраняет
-старую папку как дополнительную резервную копию.
+## Architecture and security
 
-## Архитектура
+- `src/` is an isolated React renderer without Node.js access.
+- `electron/preload.cjs` exposes a narrow IPC bridge.
+- `electron/main.cjs` owns windows, state, filesystem access, and system operations.
+- `electron/services/` contains authentication, Minecraft installation, Modrinth, networking, backups, diagnostics, performance, and data-safety services.
 
-- `src/` — изолированный React renderer без доступа к Node.js;
-- `electron/preload.cjs` — минимальный IPC-мост;
-- `electron/main.cjs` — окно, состояние и системные операции;
-- `electron/services/auth.cjs` — Microsoft, Xbox, XSTS и Minecraft Services;
-- `electron/services/minecraft.cjs` — установка версий и запуск Java;
-- `electron/services/modpack.cjs` — установка и обновление `.mrpack`;
-- `electron/services/content.cjs` — обновления модов;
-- `electron/services/guard.cjs` — снимок последней успешной конфигурации модов;
-- `electron/services/preflight.cjs` — безопасная проверка перед запуском;
-- `electron/services/mod-metadata.cjs` — метаданные и дубликаты модов;
-- `electron/services/server-status.cjs` — Quick Join и status-протокол Minecraft;
-- `electron/services/maintenance.cjs` — бэкапы, импорт и обслуживание;
-- `electron/services/log-analysis.cjs` — диагностика игровых журналов;
-- `electron/services/fps-recorder.cjs` — opt-in сбор FPS через MangoHud или PresentMon;
-- `electron/services/mod-profiles.cjs` — безопасное переключение профилей модов;
-- `electron/services/instance-storage.cjs` — разбивка занятого места и безопасная очистка;
-- `electron/services/support-bundle.cjs` — обезличенные пакеты диагностики;
-- `electron/services/network.cjs` — повторы, отмена, атомарные загрузки и хеши.
+The renderer uses `contextIsolation`, Electron sandboxing, and disabled `nodeIntegration`. Navigation, webviews, and browser permissions are restricted. Network and filesystem operations stay in the main process.
 
-Renderer запускается с `contextIsolation`, sandbox и отключённым
-`nodeIntegration`. Навигация, webview и разрешения браузера ограничены; сетевые
-и файловые операции выполняются в main-процессе.
+Diagnostic exports redact tokens, personal paths, email addresses, and server IPs. Please review [SECURITY.md](SECURITY.md) before reporting a vulnerability.
 
 ## Microsoft OAuth
 
-По умолчанию используется публичный client ID проекта
-[Prism Launcher](https://github.com/PrismLauncher/PrismLauncher)
-и его актуальный consumer device-code flow Microsoft. Onyx не получает пароль Microsoft:
-пользователь подтверждает вход на странице Microsoft, а refresh-токен хранится
-локально и шифруется средствами Windows.
-
-При необходимости client ID можно переопределить окружением:
+Onyx currently defaults to the public Prism Launcher Microsoft OAuth client ID and its consumer device-code flow. A custom client ID can be supplied for development:
 
 ```powershell
 $env:ONYX_MICROSOFT_CLIENT_ID="your-client-id"
 npm run dev
 ```
 
-Refresh-токены привязаны к client ID. После его изменения сохранённые аккаунты
-нужно добавить заново.
+Refresh tokens are tied to the client ID. Accounts must be added again after changing it.
 
-## Правовой статус
+## Contributing
 
-Onyx не распространяет Minecraft и не обходит лицензию. Файлы игры скачиваются
-напрямую с серверов Mojang, контент — по URL из API и манифестов Modrinth. Для
-полной игры нужен Microsoft-аккаунт с лицензией Minecraft: Java Edition.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development and pull-request workflow.
 
-Onyx Launcher — независимый проект и не связан с Microsoft, Mojang Studios или
-Modrinth. Minecraft является товарным знаком Microsoft.
+## Legal
+
+Onyx does not distribute Minecraft or bypass its license. Game files are downloaded directly from Mojang, and third-party content is downloaded from URLs provided by Modrinth APIs and manifests. A licensed Microsoft account is required for the full Minecraft: Java Edition experience.
+
+Onyx Launcher is an independent project and is not affiliated with Microsoft, Mojang Studios, or Modrinth. Minecraft is a trademark of Microsoft.
+
+Released under the [MIT License](LICENSE). Third-party attributions are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

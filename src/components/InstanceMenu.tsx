@@ -75,7 +75,7 @@ export function InstanceMenu({
                 )}
               </span>
               <div>
-                <h2>{instance.id === "vanilla-start" && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name}</h2>
+                <h2>{instance.id === "vanilla-start" && instance.name === "Pure Game" ? t("home.defaultName") : instance.name}</h2>
                 <p>
                   Minecraft {instance.version} · {instance.loader}
                 </p>

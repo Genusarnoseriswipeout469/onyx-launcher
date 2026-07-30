@@ -22,7 +22,11 @@
     "dist:linux:archive": "npm run build:renderer && electron-builder --linux dir --x64 && npm run package:linux:tar",
     "dist:linux:all": "npm run build:renderer && electron-builder --linux AppImage --x64 && electron-builder --linux dir --x64 && npm run package:linux:tar",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "validate": "npm run typecheck && npm run lint && npm test",
+    "check": "npm run validate && npm run build:renderer",
+    "dist:windows": "npm run build:renderer && electron-builder --win nsis portable --x64",
+    "capture:screenshots": "npm run build:renderer && node scripts/capture-screenshots.cjs"
   },
   "dependencies": {
     "archiver": "8.0.0",

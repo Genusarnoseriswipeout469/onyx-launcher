@@ -119,8 +119,8 @@ export function InstanceCard({
       <div className="instance-card__body">
         <div className="instance-card__heading">
           <div>
-            <h3>{builtIn && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name}</h3>
-            <p>{builtIn && instance.description === "Minecraft без модификаций" ? t("home.defaultDescription") : instance.description}</p>
+            <h3>{builtIn && instance.name === "Pure Game" ? t("home.defaultName") : instance.name}</h3>
+            <p>{builtIn && instance.description === "Minecraft without modifications" ? t("home.defaultDescription") : instance.description}</p>
           </div>
           <button
             className="icon-button icon-button--quiet"

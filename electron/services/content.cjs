@@ -9,10 +9,10 @@ function assertManagedFile(instancesRoot, filePath) {
   const root = path.resolve(instancesRoot);
   const target = path.resolve(filePath);
   if (!target.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Файл находится вне папки инстансов");
+    throw new Error("The file is outside the instances directory");
   }
   if (!/\.jar(?:\.disabled)?$/i.test(target)) {
-    throw new Error("Обновлять можно только JAR-моды");
+    throw new Error("Only JAR mods can be updated");
   }
   return target;
 }
@@ -21,7 +21,7 @@ function assertManagedInstance(instancesRoot, instanceId) {
   const root = path.resolve(instancesRoot);
   const target = path.resolve(root, String(instanceId));
   if (!target.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Инстанс находится вне управляемой папки");
+    throw new Error("The instance is outside the managed directory");
   }
   return target;
 }
@@ -29,7 +29,7 @@ function assertManagedInstance(instancesRoot, instanceId) {
 function safeHistoryName(value) {
   const name = String(value || "");
   if (!name || name !== path.basename(name)) {
-    throw new Error("История обновления содержит небезопасный путь");
+    throw new Error("The update history contains an unsafe path");
   }
   return name;
 }
@@ -139,7 +139,7 @@ function safeModrinthDownload(url) {
     parsed.protocol !== "https:" ||
     !["cdn.modrinth.com", "cdn-raw.modrinth.com"].includes(parsed.hostname)
   ) {
-    throw new Error("Modrinth вернул небезопасный адрес файла");
+    throw new Error("Modrinth returned an unsafe file URL");
   }
   return parsed.toString();
 }
@@ -325,7 +325,7 @@ async function rollbackModUpdate({
   transactionId,
 }) {
   if (!/^[\w.-]+$/i.test(String(transactionId))) {
-    throw new Error("Некорректный идентификатор истории");
+    throw new Error("Invalid history entry ID");
   }
   const instanceDirectory = assertManagedInstance(instancesRoot, instanceId);
   const modsDirectory = path.join(instanceDirectory, "mods");
@@ -348,10 +348,10 @@ async function rollbackModUpdate({
     transaction?.kind !== "mod-update" ||
     transaction?.id !== transactionId
   ) {
-    throw new Error("Запись истории повреждена");
+    throw new Error("The history entry is corrupted");
   }
   if (transaction.rolledBackAt) {
-    throw new Error("Это обновление уже отменено");
+    throw new Error("This update has already been rolled back");
   }
 
   const previousName = safeHistoryName(transaction.previousName);
@@ -368,12 +368,12 @@ async function rollbackModUpdate({
     : null;
   const backupStats = await fsp.stat(backupPath).catch(() => null);
   if (!backupStats?.isFile()) {
-    throw new Error("Исходный файл для отката не найден");
+    throw new Error("The original file required for rollback was not found");
   }
   if (replacedBackupPath) {
     const replacedStats = await fsp.stat(replacedBackupPath).catch(() => null);
     if (!replacedStats?.isFile()) {
-      throw new Error("Заменённый файл для отката не найден");
+      throw new Error("The replaced file required for rollback was not found");
     }
   }
 

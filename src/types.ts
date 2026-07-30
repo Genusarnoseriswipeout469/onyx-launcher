@@ -5,10 +5,11 @@ export type RouteId =
   | "picks"
   | "downloads"
   | "instance"
+  | "skins"
   | "settings";
 
 export type Accent = "lime" | "violet" | "cyan";
-export type Locale = "ru" | "en";
+export type Locale = "en";
 export type InstanceColor = "lime" | "amber" | "violet" | "cyan" | "rose";
 export type InstanceStatus =
   | "ready"
@@ -21,7 +22,7 @@ export type InstanceStatus =
 
 export interface Profile {
   name: string;
-  kind: "local" | "microsoft";
+  kind: "local" | "microsoft" | "offline";
   avatarUrl?: string;
   uuid?: string;
   signedInAt?: string;
@@ -740,6 +741,12 @@ export interface OnyxBridge {
       profiles: Profile[];
       storage: AuthStorageStatus;
     }>;
+    refreshProfile(accountId: string): Promise<Profile>;
+    addOffline(name: string): Promise<Profile>;
+    chooseSkin(
+      accountId: string,
+      variant: "classic" | "slim",
+    ): Promise<Profile | null>;
     switch(accountId: string): Promise<Profile>;
     remove(accountId: string): Promise<Profile>;
   };

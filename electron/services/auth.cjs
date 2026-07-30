@@ -17,13 +17,77 @@ const DEVICE_CODE_ENDPOINT =
 const TOKEN_ENDPOINT =
   "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const SCOPE = "XboxLive.SignIn XboxLive.offline_access";
-const STORE_VERSION = 3;
+const STORE_VERSION = 4;
 const XBOX_AUTH = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MC_LOGIN = "https://api.minecraftservices.com/launcher/login";
 const MC_ENTITLEMENTS =
   "https://api.minecraftservices.com/entitlements/mcstore";
 const MC_PROFILE = "https://api.minecraftservices.com/minecraft/profile";
+const MC_SKINS = "https://api.minecraftservices.com/minecraft/profile/skins";
+const MAX_SKIN_BYTES = 1024 * 1024;
+
+function offlineUuid(name) {
+  const bytes = crypto.createHash("md5").update(`OfflinePlayer:${name}`).digest();
+  bytes[6] = (bytes[6] & 0x0f) | 0x30;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function normalizeOfflineName(value) {
+  const name = String(value || "").trim();
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
+    throw new Error(
+      "An offline account name must contain 3–16 Latin letters, digits, or underscores",
+    );
+  }
+  return name;
+}
+
+function normalizeSkinVariant(value) {
+  return value === "slim" ? "slim" : "classic";
+}
+
+function validateSkin(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length > MAX_SKIN_BYTES) {
+    throw new Error("The skin must be a PNG file no larger than 1 MB");
+  }
+  if (
+    buffer.length < 24 ||
+    !buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) ||
+    buffer.toString("ascii", 12, 16) !== "IHDR"
+  ) {
+    throw new Error("Select a valid PNG skin file");
+  }
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  if (width !== 64 || ![32, 64].includes(height)) {
+    throw new Error("The skin must be 64×32 or 64×64 pixels");
+  }
+}
+
+function localSkin(buffer, variant) {
+  validateSkin(buffer);
+  return {
+    id: crypto.randomUUID(),
+    state: "ACTIVE",
+    url: `data:image/png;base64,${buffer.toString("base64")}`,
+    variant: normalizeSkinVariant(variant),
+  };
+}
+
+function normalizedLocalSkin(value) {
+  if (!value || typeof value.url !== "string") return null;
+  if (!value.url.startsWith("data:image/png;base64,")) return null;
+  if (value.url.length > Math.ceil(MAX_SKIN_BYTES * 1.4)) return null;
+  return {
+    id: typeof value.id === "string" ? value.id.slice(0, 80) : crypto.randomUUID(),
+    state: "ACTIVE",
+    url: value.url,
+    variant: normalizeSkinVariant(value.variant),
+  };
+}
 
 class AuthService {
   constructor(userDataPath) {
@@ -67,7 +131,7 @@ class AuthService {
     if (!response.ok || !payload.device_code) {
       throw new Error(
         payload.error_description ||
-          "Microsoft не выдал код для авторизации",
+          "Microsoft did not provide an authorization code",
       );
     }
     const sessionId = crypto.randomUUID();
@@ -93,15 +157,15 @@ class AuthService {
 
   async waitForLogin(sessionId, onStatus) {
     const session = this.sessions.get(sessionId);
-    if (!session) throw new Error("Сессия авторизации не найдена");
+    if (!session) throw new Error("The authorization session was not found");
     const deadline = session.createdAt + session.expires_in * 1000;
     let interval = Math.max(3, session.interval || 5);
 
     try {
       while (Date.now() < deadline) {
-        if (session.cancelled) throw new Error("Авторизация отменена");
+        if (session.cancelled) throw new Error("Authorization cancelled");
         await delay(interval * 1000);
-        onStatus?.("Ожидаю подтверждение Microsoft…");
+        onStatus?.("Waiting for Microsoft confirmation…");
         const { response, payload } = await fetchJsonResponse(TOKEN_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -112,7 +176,7 @@ class AuthService {
           }),
         });
         if (response.ok && payload.access_token) {
-          onStatus?.("Проверяю профиль Xbox…");
+          onStatus?.("Checking the Xbox profile…");
           const account = await this.exchangeMicrosoftToken(payload);
           await this.saveAccount({
             profile: account.profile,
@@ -130,16 +194,16 @@ class AuthService {
           continue;
         }
         if (payload.error === "authorization_declined") {
-          throw new Error("Вход отклонён в окне Microsoft");
+          throw new Error("Sign-in was declined in the Microsoft window");
         }
         if (payload.error === "expired_token") {
-          throw new Error("Код входа истёк — начните авторизацию заново");
+          throw new Error("The sign-in code expired; start authorization again");
         }
         throw new Error(
-          payload.error_description || "Microsoft не завершил авторизацию",
+          payload.error_description || "Microsoft did not complete authorization",
         );
       }
-      throw new Error("Время ожидания авторизации истекло");
+      throw new Error("Authorization timed out");
     } finally {
       this.sessions.delete(sessionId);
     }
@@ -167,7 +231,7 @@ class AuthService {
 
     const userHash = xsts.DisplayClaims?.xui?.[0]?.uhs;
     if (!userHash || !xsts.Token) {
-      throw new Error("Xbox не вернул данные профиля");
+      throw new Error("Xbox did not return profile data");
     }
 
     const minecraft = await this.postJson(
@@ -176,7 +240,7 @@ class AuthService {
       { xboxContract: false },
     );
     if (!minecraft.access_token) {
-      throw new Error("Minecraft Services не вернул access token");
+      throw new Error("Minecraft Services did not return an access token");
     }
     const headers = {
       Authorization: `Bearer ${minecraft.access_token}`,
@@ -187,11 +251,11 @@ class AuthService {
     ]);
     if (!Array.isArray(entitlements.items) || entitlements.items.length === 0) {
       throw new Error(
-        "На аккаунте не найдена лицензия Minecraft: Java Edition",
+        "No Minecraft: Java Edition license was found on this account",
       );
     }
     if (!profile.id || !profile.name) {
-      throw new Error("Minecraft-профиль ещё не создан");
+      throw new Error("A Minecraft profile has not been created yet");
     }
     return {
       profile: {
@@ -236,15 +300,15 @@ class AuthService {
     if (!response.ok) {
       const code = payload.XErr;
       const known = {
-        2148916233: "У Microsoft-аккаунта нет профиля Xbox",
-        2148916235: "Xbox Live недоступен в регионе аккаунта",
+        2148916233: "The Microsoft account does not have an Xbox profile",
+        2148916235: "Xbox Live is unavailable in the account region",
         2148916238:
-          "Детскому аккаунту требуется разрешение взрослого в Microsoft Family",
+          "A child account requires adult approval in Microsoft Family",
       };
       const statusMessage =
         response.status === 401
-          ? "Xbox отклонил токен Microsoft (401). Удалите аккаунт из Onyx и выполните вход заново"
-          : `Ошибка авторизации Xbox (${response.status})`;
+          ? "Xbox rejected the Microsoft token (401). Remove the account from Onyx and sign in again"
+          : `Xbox authorization error (${response.status})`;
       throw new Error(
         known[code] ||
           payload.Message ||
@@ -269,18 +333,28 @@ class AuthService {
     if (!response.ok || !payload.access_token) {
       throw new Error(
         payload.error_description ||
-          "Сессия Microsoft истекла — войдите снова",
+          "The Microsoft session expired; sign in again",
       );
     }
     return payload;
   }
 
-  async getLaunchAccount() {
-    const stored = await this.loadAccount();
-    const accountId = stored?.profile?.uuid;
+  async getLaunchAccount(accountId = null) {
+    const stored = await this.loadAccount(accountId);
+    if (stored?.profile?.kind === "offline") {
+      return {
+        name: stored.profile.name,
+        uuid: stored.profile.uuid.replaceAll("-", ""),
+        accessToken: "0",
+        userType: "legacy",
+        xuid: "",
+        clientId: "",
+      };
+    }
+    const storedAccountId = stored?.profile?.uuid;
     if (
       this.cachedMinecraft &&
-      this.cachedAccountId === accountId &&
+      this.cachedAccountId === storedAccountId &&
       this.cachedMinecraft.expiresAt > Date.now() + 120_000
     ) {
       return this.cachedMinecraft;
@@ -288,7 +362,7 @@ class AuthService {
     if (!stored?.refreshToken) return null;
     if (!this.sameClientId(stored.oauthClientId, CLIENT_ID)) {
       throw new Error(
-        "Аккаунт сохранён старой схемой Microsoft OAuth. Добавьте его заново, чтобы обновить вход",
+        "The account uses a legacy Microsoft OAuth format. Add it again to update sign-in",
       );
     }
     const refreshed = await this.refreshMicrosoft(stored.refreshToken);
@@ -298,7 +372,7 @@ class AuthService {
       refreshToken: refreshed.refresh_token || stored.refreshToken,
       oauthClientId: CLIENT_ID,
       signedInAt: stored.signedInAt,
-    });
+    }, { activate: false });
     this.cachedMinecraft = account.launchAccount;
     this.cachedAccountId = account.profile.uuid;
     return account.launchAccount;
@@ -309,28 +383,150 @@ class AuthService {
     return stored?.profile || null;
   }
 
-  async saveAccount(account) {
+  async refreshProfile(accountId = null) {
+    const stored = await this.loadAccount(accountId);
+    if (!stored?.profile?.uuid) {
+      throw new Error("Select a saved account first");
+    }
+    if (stored.profile.kind !== "microsoft") return stored.profile;
+
+    const launchAccount = await this.getLaunchAccount(stored.profile.uuid);
+    if (!launchAccount?.accessToken) {
+      throw new Error("Failed to refresh the Microsoft session");
+    }
+
+    const remote = await fetchJson(MC_PROFILE, {
+      headers: { Authorization: `Bearer ${launchAccount.accessToken}` },
+    });
+    if (!remote.id || !remote.name) {
+      throw new Error("Minecraft Services did not return a player profile");
+    }
+
+    const profile = {
+      ...stored.profile,
+      name: remote.name,
+      uuid: remote.id,
+      kind: "microsoft",
+      skins: Array.isArray(remote.skins) ? remote.skins : [],
+      avatarUrl: `https://mc-heads.net/avatar/${remote.id}/64?skin=${Date.now()}`,
+    };
+    await this.replaceProfile(profile);
+    return profile;
+  }
+
+  async addOfflineAccount(name) {
+    const normalizedName = normalizeOfflineName(name);
+    const profile = {
+      name: normalizedName,
+      uuid: offlineUuid(normalizedName),
+      kind: "offline",
+      signedInAt: new Date().toISOString(),
+      skins: [],
+    };
+    await this.saveAccount({ profile, signedInAt: profile.signedInAt });
+    return profile;
+  }
+
+  async setSkinFromFile(filePath, variant, accountId = null) {
+    const fileInfo = await fsp.stat(filePath);
+    if (!fileInfo.isFile() || fileInfo.size > MAX_SKIN_BYTES) {
+      throw new Error('The skin must be a PNG file no larger than 1 MB');
+    }
+    const buffer = await fsp.readFile(filePath);
+    validateSkin(buffer);
+    const stored = await this.loadAccount(accountId);
+    if (!stored?.profile?.uuid) {
+      throw new Error("Select a saved account first");
+    }
+    if (stored.profile.kind === "offline") {
+      const profile = {
+        ...stored.profile,
+        skins: [localSkin(buffer, variant)],
+      };
+      await this.replaceProfile(profile);
+      return profile;
+    }
+    if (stored.profile.kind !== "microsoft") {
+      throw new Error("Skins are available only for Microsoft and offline accounts");
+    }
+
+    const launchAccount = await this.getLaunchAccount(stored.profile.uuid);
+    const form = new FormData();
+    form.set("variant", normalizeSkinVariant(variant));
+    form.set(
+      "file",
+      new Blob([buffer], { type: "image/png" }),
+      path.basename(filePath) || "skin.png",
+    );
+    const response = await fetch(MC_SKINS, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${launchAccount.accessToken}` },
+      body: form,
+    });
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Minecraft Services occasionally responds without a JSON error body.
+    }
+    if (!response.ok) {
+      throw new Error(
+        payload.errorMessage ||
+          payload.error ||
+          `Minecraft Services could not apply the skin (${response.status})`,
+      );
+    }
+    const current = await this.loadAccount(stored.profile.uuid);
+    const profile = {
+      ...current.profile,
+      name: payload.name || current.profile.name,
+      skins: Array.isArray(payload.skins) ? payload.skins : current.profile.skins || [],
+      avatarUrl: `https://mc-heads.net/avatar/${current.profile.uuid}/64?skin=${Date.now()}`,
+    };
+    await this.replaceProfile(profile);
+    return profile;
+  }
+
+  async saveAccount(account, { activate = true } = {}) {
     await fsp.mkdir(path.dirname(this.accountPath), { recursive: true });
     const store = await this.loadStore();
     const accountId = account.profile.uuid;
+    const offline = account.profile.kind === "offline";
     const nextAccount = {
       profile: account.profile,
-      refreshToken: account.refreshToken,
-      oauthClientId: account.oauthClientId || CLIENT_ID,
       signedInAt: account.signedInAt,
+      ...(offline
+        ? {}
+        : {
+            refreshToken: account.refreshToken,
+            oauthClientId: account.oauthClientId || CLIENT_ID,
+          }),
     };
     const existingIndex = store.accounts.findIndex(
       (item) => item.profile.uuid === accountId,
     );
     if (existingIndex >= 0) store.accounts[existingIndex] = nextAccount;
     else store.accounts.push(nextAccount);
-    store.activeId = accountId;
+    if (activate) store.activeId = accountId;
+    await this.saveStore(store);
+  }
+
+  async replaceProfile(profile) {
+    const store = await this.loadStore();
+    const accountIndex = store.accounts.findIndex(
+      (account) => account.profile.uuid === profile.uuid,
+    );
+    if (accountIndex < 0) throw new Error("Saved account not found");
+    store.accounts[accountIndex] = {
+      ...store.accounts[accountIndex],
+      profile,
+    };
     await this.saveStore(store);
   }
 
   protectToken(refreshToken) {
     if (!this.encryptionAvailable()) {
-      throw new Error("Системное защищённое хранилище недоступно");
+      throw new Error("Secure system storage is unavailable");
     }
     return {
       encrypted: true,
@@ -354,25 +550,38 @@ class AuthService {
   }
 
   async saveStore(store) {
-    if (!this.encryptionAvailable()) {
+    const encryptionAvailable = this.encryptionAvailable();
+    const persistentAccounts = encryptionAvailable
+      ? store.accounts
+      : store.accounts.filter((account) => account.profile?.kind === "offline");
+    if (!encryptionAvailable) {
       this.volatileStore = structuredClone({
         version: STORE_VERSION,
         activeId: store.activeId || null,
         accounts: store.accounts,
       });
-      await fsp.rm(this.accountPath, { force: true }).catch(() => undefined);
-      return;
+      if (!persistentAccounts.length) {
+        await fsp.rm(this.accountPath, { force: true }).catch(() => undefined);
+        return;
+      }
     }
-    this.volatileStore = null;
+    if (encryptionAvailable) this.volatileStore = null;
     const serialized = {
       version: STORE_VERSION,
       activeId: store.activeId || null,
-      accounts: store.accounts.map((account) => ({
-        profile: account.profile,
-        refreshToken: this.protectToken(account.refreshToken),
-        oauthClientId: account.oauthClientId || null,
-        signedInAt: account.signedInAt,
-      })),
+      accounts: persistentAccounts.map((account) =>
+        account.profile?.kind === "offline"
+          ? {
+              profile: account.profile,
+              signedInAt: account.signedInAt,
+            }
+          : {
+              profile: account.profile,
+              refreshToken: this.protectToken(account.refreshToken),
+              oauthClientId: account.oauthClientId || null,
+              signedInAt: account.signedInAt,
+            },
+      ),
     };
     const temporary = `${this.accountPath}.tmp`;
     await fsp.writeFile(
@@ -389,7 +598,7 @@ class AuthService {
     try {
       const parsed = JSON.parse(await fsp.readFile(this.accountPath, "utf8"));
       const rawAccounts =
-        (parsed.version === 2 || parsed.version === STORE_VERSION) &&
+        (parsed.version === 2 || parsed.version === 3 || parsed.version === STORE_VERSION) &&
         Array.isArray(parsed.accounts)
           ? parsed.accounts
           : parsed.profile
@@ -398,6 +607,26 @@ class AuthService {
       const accounts = [];
       for (const account of rawAccounts) {
         try {
+          if (account.profile?.kind === "offline") {
+            const name = normalizeOfflineName(account.profile.name);
+            const skins = Array.isArray(account.profile.skins)
+              ? account.profile.skins
+                  .map(normalizedLocalSkin)
+                  .filter(Boolean)
+                  .slice(0, 1)
+              : [];
+            accounts.push({
+              profile: {
+                name,
+                uuid: offlineUuid(name),
+                kind: "offline",
+                signedInAt: account.signedInAt,
+                skins,
+              },
+              signedInAt: account.signedInAt,
+            });
+            continue;
+          }
           const refreshToken = this.unprotectToken(account.refreshToken);
           if (account.profile?.uuid && refreshToken) {
             accounts.push({
@@ -432,11 +661,11 @@ class AuthService {
     }
   }
 
-  async loadAccount() {
+  async loadAccount(accountId = null) {
     const store = await this.loadStore();
     return (
       store.accounts.find(
-        (account) => account.profile.uuid === store.activeId,
+        (account) => account.profile.uuid === (accountId || store.activeId),
       ) || null
     );
   }
@@ -458,7 +687,7 @@ class AuthService {
     const account = store.accounts.find(
       (item) => item.profile.uuid === accountId,
     );
-    if (!account) throw new Error("Сохранённый аккаунт не найден");
+    if (!account) throw new Error("Saved account not found");
     store.activeId = accountId;
     await this.saveStore(store);
     this.cachedMinecraft = null;

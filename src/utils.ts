@@ -1,22 +1,20 @@
-type FormattingLocale = "ru" | "en";
+type FormattingLocale = "en";
 
 export function formatPlaytime(
   minutes: number,
-  locale: FormattingLocale = "ru",
+  _locale: FormattingLocale = "en",
 ) {
-  if (minutes < 60) return `${minutes} ${locale === "ru" ? "мин" : "min"}`;
+  if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${locale === "ru" ? "ч" : "h"}`;
-  return locale === "ru"
-    ? `${Math.floor(hours / 24)} дн ${hours % 24} ч`
-    : `${Math.floor(hours / 24)} d ${hours % 24} h`;
+  if (hours < 24) return `${hours} h`;
+  return `${Math.floor(hours / 24)} d ${hours % 24} h`;
 }
 
 export function compactNumber(
   value: number,
-  locale: FormattingLocale = "ru",
+  _locale: FormattingLocale = "en",
 ) {
-  return new Intl.NumberFormat(locale === "ru" ? "ru" : "en", {
+  return new Intl.NumberFormat("en", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
@@ -24,10 +22,9 @@ export function compactNumber(
 
 export function formatBytes(
   value = 0,
-  locale: FormattingLocale = "ru",
+  _locale: FormattingLocale = "en",
 ) {
-  const units =
-    locale === "ru" ? ["Б", "КБ", "МБ", "ГБ"] : ["B", "KB", "MB", "GB"];
+  const units = ["B", "KB", "MB", "GB"];
   if (!value) return `0 ${units[0]}`;
   const index = Math.min(
     Math.floor(Math.log(value) / Math.log(1024)),

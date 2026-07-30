@@ -23,7 +23,7 @@ function decodeVarInt(buffer, offset = 0) {
     const byte = buffer[offset + size];
     value |= (byte & 0x7f) << (7 * size);
     size += 1;
-    if (size > 5) throw new Error("Некорректный ответ Minecraft-сервера");
+    if (size > 5) throw new Error("Invalid Minecraft server response");
     if ((byte & 0x80) === 0) return { value: value >>> 0, size };
   }
   return null;
@@ -55,7 +55,7 @@ function parseStatusResponse(buffer) {
   const packetLength = decodeVarInt(buffer);
   if (!packetLength) return null;
   if (packetLength.value > MAX_STATUS_PACKET) {
-    throw new Error("Ответ Minecraft-сервера слишком большой");
+    throw new Error("The Minecraft server response is too large");
   }
   const packetStart = packetLength.size;
   const packetEnd = packetStart + packetLength.value;
@@ -64,7 +64,7 @@ function parseStatusResponse(buffer) {
   const packetId = decodeVarInt(buffer, packetStart);
   if (!packetId) return null;
   if (packetId.value !== 0) {
-    throw new Error("Сервер вернул неожиданный status packet");
+    throw new Error("The server returned an unexpected status packet");
   }
   const jsonOffset = packetStart + packetId.size;
   const jsonLength = decodeVarInt(buffer, jsonOffset);
@@ -72,7 +72,7 @@ function parseStatusResponse(buffer) {
   const contentStart = jsonOffset + jsonLength.size;
   const contentEnd = contentStart + jsonLength.value;
   if (contentEnd > packetEnd) {
-    throw new Error("Повреждённый ответ Minecraft-сервера");
+    throw new Error("Corrupted Minecraft server response");
   }
   return JSON.parse(buffer.subarray(contentStart, contentEnd).toString("utf8"));
 }
@@ -96,10 +96,10 @@ function motdToText(value) {
 }
 
 function friendlySocketError(error) {
-  if (error?.code === "ECONNREFUSED") return "Сервер отклонил подключение";
-  if (error?.code === "ENOTFOUND") return "Адрес сервера не найден";
-  if (error?.code === "ETIMEDOUT") return "Сервер не ответил вовремя";
-  return error instanceof Error ? error.message : "Сервер недоступен";
+  if (error?.code === "ECONNREFUSED") return "The server refused the connection";
+  if (error?.code === "ENOTFOUND") return "The server address could not be resolved";
+  if (error?.code === "ETIMEDOUT") return "The server did not respond in time";
+  return error instanceof Error ? error.message : "The server is unavailable";
 }
 
 function inputHasExplicitPort(input) {
@@ -150,7 +150,7 @@ async function resolveMinecraftEndpoint(
 
 async function pingMinecraftServer(input, { timeoutMs = 4000 } = {}) {
   const address = parseServerAddress(input);
-  if (!address) throw new Error("Сначала укажите адрес сервера");
+  if (!address) throw new Error("Enter a server address first");
   const endpoint = await resolveMinecraftEndpoint(address, input);
 
   return new Promise((resolve) => {
@@ -182,7 +182,7 @@ async function pingMinecraftServer(input, { timeoutMs = 4000 } = {}) {
           resolvedAddress: endpoint.viaSrv
             ? `${endpoint.host}:${endpoint.port}`
             : undefined,
-          error: "Ответ Minecraft-сервера слишком большой",
+          error: "The Minecraft server response is too large",
         });
         return;
       }
@@ -211,7 +211,7 @@ async function pingMinecraftServer(input, { timeoutMs = 4000 } = {}) {
       finish({
         online: false,
         address: address.address,
-        error: "Сервер не ответил вовремя",
+        error: "The server did not respond in time",
       }),
     );
     socket.once("error", (error) =>
@@ -226,7 +226,7 @@ async function pingMinecraftServer(input, { timeoutMs = 4000 } = {}) {
         finish({
           online: false,
           address: address.address,
-          error: "Сервер закрыл соединение без ответа",
+          error: "The server closed the connection without responding",
         });
       }
     });

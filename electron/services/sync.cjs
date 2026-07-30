@@ -74,14 +74,14 @@ function validateSyncProfile(value) {
     !value.instance ||
     !Array.isArray(value.mods)
   ) {
-    throw new Error("Это не поддерживаемый профиль Onyx Sync");
+    throw new Error("This is not a supported Onyx Sync profile");
   }
   const source = value.instance;
-  const name = String(source.name || "Импортированный профиль")
+  const name = String(source.name || "Imported profile")
     .trim()
     .slice(0, 48);
   const version = String(source.version || "").trim().slice(0, 40);
-  if (!version) throw new Error("В профиле не указана версия Minecraft");
+  if (!version) throw new Error("The profile does not specify a Minecraft version");
   const settings = source.settings || {};
   const servers = cleanServers(settings.servers);
   const installProfile = source.installProfile;
@@ -106,7 +106,7 @@ function validateSyncProfile(value) {
       name,
       version,
       loader: String(source.loader || "Vanilla").slice(0, 80),
-      description: String(source.description || "Профиль Onyx Sync").slice(
+      description: String(source.description || "Onyx Sync profile").slice(
         0,
         180,
       ),

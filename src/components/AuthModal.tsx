@@ -4,11 +4,13 @@ import {
   Check,
   Clipboard,
   ExternalLink,
+  ImagePlus,
   LoaderCircle,
   LogOut,
   Plus,
   ShieldCheck,
   Trash2,
+  UserPlus,
   UserRound,
   X,
 } from "lucide-react";
@@ -36,7 +38,10 @@ export function AuthModal({
   const [copied, setCopied] = useState(false);
   const [accounts, setAccounts] = useState<Profile[]>([]);
   const [persistentStorage, setPersistentStorage] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<"microsoft" | "offline" | null>(null);
+  const [offlineName, setOfflineName] = useState("");
+  const [skinVariant, setSkinVariant] = useState<"classic" | "slim">("classic");
+  const [skinBusy, setSkinBusy] = useState(false);
 
   const refreshAccounts = async () => {
     const result = await window.onyx.auth.list();
@@ -48,9 +53,9 @@ export function AuthModal({
     return window.onyx.onAuthStatus((event) => {
       if (event.sessionId !== login?.sessionId) return;
       setStatus(
-        event.message === "Ожидаю подтверждение Microsoft…"
+        event.message === "Waiting for Microsoft confirmation…"
           ? t("auth.status.waitMicrosoft")
-          : event.message === "Проверяю профиль Xbox…"
+          : event.message === "Checking the Xbox profile…"
             ? t("auth.status.xbox")
             : event.message,
       );
@@ -62,7 +67,8 @@ export function AuthModal({
       setError("");
       setStatus("");
       setCopied(false);
-      setAdding(false);
+      setAdding(null);
+      setOfflineName("");
     } else {
       void refreshAccounts();
     }
@@ -80,7 +86,7 @@ export function AuthModal({
         .then((nextProfile) => {
           onChanged(nextProfile);
           void refreshAccounts();
-          setAdding(false);
+          setAdding(null);
           setStatus(t("auth.status.connected"));
           setLogin(null);
         })
@@ -157,6 +163,50 @@ export function AuthModal({
     }
   };
 
+  const addOfflineAccount = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await window.onyx.auth.addOffline(offlineName);
+      onChanged(next);
+      await refreshAccounts();
+      setAdding(null);
+      setOfflineName("");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : t("auth.error.start"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeSkin = async () => {
+    setSkinBusy(true);
+    setError("");
+    try {
+      if (!profile.uuid) throw new Error('Select a saved account first');
+      const next = await window.onyx.auth.chooseSkin(profile.uuid, skinVariant);
+      if (!next) return;
+      onChanged(next);
+      await refreshAccounts();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : t("auth.error.finish"),
+      );
+    } finally {
+      setSkinBusy(false);
+    }
+  };
+
+  const activeSkin =
+    profile.skins?.find((skin) => skin.state === "ACTIVE") ||
+    profile.skins?.[0];
+
   return (
     <AnimatePresence>
       {open && (
@@ -179,7 +229,7 @@ export function AuthModal({
               <X size={18} />
             </button>
 
-            {profile.kind === "microsoft" && !adding && !login ? (
+            {profile.kind !== "local" && !adding && !login ? (
               <div className="auth-connected">
                 <span className="auth-connected__avatar">
                   {profile.avatarUrl ? (
@@ -192,10 +242,59 @@ export function AuthModal({
                   </i>
                 </span>
                 <p className="modal__eyebrow">
-                  <ShieldCheck size={14} /> {t("auth.license")}
+                  {profile.kind === "microsoft" ? (
+                    <ShieldCheck size={14} />
+                  ) : (
+                    <UserRound size={14} />
+                  )}
+                  {profile.kind === "microsoft"
+                    ? t("auth.license")
+                    : t("auth.offline")}
                 </p>
                 <h2>{profile.name}</h2>
-                <p>{t("auth.connected")}</p>
+                <p>
+                  {profile.kind === "microsoft"
+                    ? t("auth.connected")
+                    : t("auth.offline.connected")}
+                </p>
+                <div className="auth-skin">
+                  {activeSkin ? (
+                    <img src={activeSkin.url} alt="" />
+                  ) : (
+                    <ImagePlus size={22} />
+                  )}
+                  <div>
+                    <strong>{t("auth.skin")}</strong>
+                    <label>
+                      {t("auth.skin.variant")}
+                      <select
+                        value={skinVariant}
+                        onChange={(event) =>
+                          setSkinVariant(
+                            event.target.value === "slim" ? "slim" : "classic",
+                          )
+                        }
+                        disabled={busy || skinBusy}
+                      >
+                        <option value="classic">{t("auth.skin.classic")}</option>
+                        <option value="slim">{t("auth.skin.slim")}</option>
+                      </select>
+                    </label>
+                    <button
+                      className="button button--secondary"
+                      onClick={() => void changeSkin()}
+                      disabled={busy || skinBusy}
+                    >
+                      {skinBusy ? <LoaderCircle className="spin" size={15} /> : <ImagePlus size={15} />}
+                      {t("auth.skin.change")}
+                    </button>
+                  </div>
+                </div>
+                {profile.kind === "offline" && (
+                  <small className="auth-offline-skin-hint">
+                    {t("auth.skin.offlineHint")}
+                  </small>
+                )}
                 {accounts.length > 0 && (
                   <div className="account-switcher">
                     <small>{t("auth.savedAccounts")}</small>
@@ -244,7 +343,7 @@ export function AuthModal({
                   <button
                     className="button button--secondary"
                     onClick={() => {
-                      setAdding(true);
+                      setAdding("microsoft");
                       void begin();
                     }}
                     disabled={busy}
@@ -261,6 +360,16 @@ export function AuthModal({
                   >
                     <LogOut size={15} /> {t("auth.signOut")}
                   </button>
+                  <button
+                    className='button button--secondary'
+                    onClick={() => {
+                      setAdding('offline');
+                      setError('');
+                    }}
+                    disabled={busy}
+                  >
+                    <UserPlus size={15} /> {t('auth.offline.add')}
+                  </button>
                 </div>
               </div>
             ) : (
@@ -271,7 +380,60 @@ export function AuthModal({
                 <h2>{t("auth.connect")}</h2>
                 <p className="modal__subtitle">{t("auth.subtitle")}</p>
 
-                {!login ? (
+                {!login && adding === 'offline' ? (
+                  <form
+                    className='auth-offline-create'
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void addOfflineAccount();
+                    }}
+                  >
+                    <span className='auth-offline-create__icon'>
+                      <UserPlus size={25} />
+                    </span>
+                    <h3>{t('auth.offline.create')}</h3>
+                    <p>{t('auth.offline.connected')}</p>
+                    <label>
+                      {t('auth.offline.name')}
+                      <input
+                        autoFocus
+                        value={offlineName}
+                        onChange={(event) => setOfflineName(event.target.value)}
+                        placeholder='Player_One'
+                        minLength={3}
+                        maxLength={16}
+                        pattern='[A-Za-z0-9_]{3,16}'
+                        disabled={busy}
+                        required
+                      />
+                      <small>{t('auth.offline.nameHint')}</small>
+                    </label>
+                    {error && <div className='auth-error'>{error}</div>}
+                    <button
+                      className='button button--primary auth-primary'
+                      type='submit'
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <LoaderCircle className='spin' size={17} />
+                      ) : (
+                        <UserPlus size={16} />
+                      )}
+                      {t('auth.offline.submit')}
+                    </button>
+                    <button
+                      className='button button--ghost auth-cancel-add'
+                      type='button'
+                      onClick={() => {
+                        setAdding(null);
+                        setError('');
+                      }}
+                      disabled={busy}
+                    >
+                      {t('auth.return')}
+                    </button>
+                  </form>
+                ) : !login ? (
                   <div className="auth-intro">
                     <div className="auth-intro__visual">
                       <span>
@@ -306,11 +468,22 @@ export function AuthModal({
                       )}
                       {t("auth.signIn")}
                     </button>
+                    <button
+                      className='button button--secondary auth-offline-button'
+                      type='button'
+                      onClick={() => {
+                        setAdding('offline');
+                        setError('');
+                      }}
+                      disabled={busy}
+                    >
+                      <UserPlus size={16} /> {t('auth.offline.add')}
+                    </button>
                     {adding && (
                       <button
                         className="button button--ghost auth-cancel-add"
                         onClick={() => {
-                          setAdding(false);
+                          setAdding(null);
                           setError("");
                         }}
                       >

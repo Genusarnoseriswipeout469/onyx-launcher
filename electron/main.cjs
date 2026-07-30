@@ -113,11 +113,11 @@ try {
 
 const DEFAULT_STATE = {
   profile: {
-    name: "Игрок",
+    name: "Player",
     kind: "local",
   },
   settings: {
-    language: "ru",
+    language: "en",
     memory: 6,
     gameDirectory: "",
     javaPath: "",
@@ -138,15 +138,15 @@ const DEFAULT_STATE = {
   instances: [
     {
       id: "vanilla-start",
-      name: "Чистая игра",
+      name: "Pure Game",
       version: "1.21.1",
       loader: "Vanilla",
-      description: "Minecraft без модификаций",
+      description: "Minecraft without modifications",
       color: "lime",
       glyph: "MC",
       favorite: true,
       status: "setup",
-      lastPlayed: "Ещё не запускался",
+      lastPlayed: "Never played",
       playtimeMinutes: 0,
       modCount: 0,
     },
@@ -241,15 +241,15 @@ async function preflightInstance(instance, persist = true) {
 
 function preflightBlockedMessage(health) {
   if (health.blocker === "disk-critical") {
-    return "Недостаточно места на диске для безопасного запуска";
+    return "Not enough disk space for a safe launch";
   }
   if (health.blocker === "memory-impossible") {
-    return "Инстансу выделено больше памяти, чем безопасно доступно системе";
+    return "The instance is allocated more memory than the system can safely provide";
   }
   if (health.blocker === "instance-directory-readonly") {
-    return "Папка инстанса недоступна для записи";
+    return "The instance folder is not writable";
   }
-  return "Инстанс не прошёл предварительную проверку";
+  return "The instance failed the preflight check";
 }
 
 function sanitizeSettingsPatch(input = {}) {
@@ -287,8 +287,8 @@ function sanitizeSettingsPatch(input = {}) {
   if (["lime", "violet", "cyan"].includes(input.accent)) {
     output.accent = input.accent;
   }
-  if (["ru", "en"].includes(input.language)) {
-    output.language = input.language;
+  if (typeof input.language === "string") {
+    output.language = "en";
   }
   if (typeof input.javaPath === "string") {
     output.javaPath = input.javaPath.trim().slice(0, 1024);
@@ -326,10 +326,29 @@ async function loadState() {
     state = structuredClone(DEFAULT_STATE);
   }
 
+  const legacyDefaults = {
+    player: "\u0418\u0433\u0440\u043e\u043a",
+    pureGame: "\u0427\u0438\u0441\u0442\u0430\u044f \u0438\u0433\u0440\u0430",
+    description:
+      "Minecraft \u0431\u0435\u0437 \u043c\u043e\u0434\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0439",
+    neverPlayed:
+      "\u0415\u0449\u0451 \u043d\u0435 \u0437\u0430\u043f\u0443\u0441\u043a\u0430\u043b\u0441\u044f",
+  };
+  state.settings.language = "en";
+  if (state.profile.name === legacyDefaults.player) state.profile.name = "Player";
   if (!state.settings.gameDirectory) {
     state.settings.gameDirectory = path.join(onyxRoot(), "instances");
   }
   for (const instance of state.instances) {
+    if (instance.id === "vanilla-start") {
+      if (instance.name === legacyDefaults.pureGame) instance.name = "Pure Game";
+      if (instance.description === legacyDefaults.description) {
+        instance.description = "Minecraft without modifications";
+      }
+    }
+    if (instance.lastPlayed === legacyDefaults.neverPlayed) {
+      instance.lastPlayed = "Never played";
+    }
     normalizeResolvedVersionId(instance);
     if (
       instance.status === "running" ||
@@ -346,7 +365,7 @@ async function loadState() {
       task.status === "installing"
     ) {
       task.status = "error";
-      task.error = "Загрузка прервалась при закрытии лаунчера";
+      task.error = "The download was interrupted when the launcher closed";
       if (
         /^[a-f0-9-]{36}$/i.test(task.instanceId || "") &&
         !state.instances.some((instance) => instance.id === task.instanceId)
@@ -371,6 +390,25 @@ async function saveState() {
   await fsp.writeFile(temporaryPath, JSON.stringify(state, null, 2), "utf8");
   await fsp.rm(statePath, { force: true }).catch(() => undefined);
   await fsp.rename(temporaryPath, statePath);
+}
+
+async function syncOfflineSkin(profile, instanceDirectory) {
+  if (profile?.kind !== "offline") return false;
+  const skin = profile.skins?.find((item) =>
+    String(item?.url || "").startsWith("data:image/png;base64,"),
+  );
+  if (!skin) return false;
+  const encoded = skin.url.slice("data:image/png;base64,".length);
+  const destination = path.join(
+    instanceDirectory,
+    "CustomSkinLoader",
+    "LocalSkin",
+    "skins",
+    `${profile.name}.png`,
+  );
+  await fsp.mkdir(path.dirname(destination), { recursive: true });
+  await fsp.writeFile(destination, Buffer.from(encoded, "base64"));
+  return true;
 }
 
 function send(channel, payload) {
@@ -537,7 +575,7 @@ function taskUpdate(task, patch) {
   ) {
     new Notification({
       title: "Onyx Launcher",
-      body: `${task.name}: установка завершена`,
+      body: `${task.name}: installation completed`,
       silent: false,
     }).show();
   }
@@ -577,7 +615,7 @@ async function runInstall(instance) {
         ...installed,
         status: "ready",
         installProgress: 100,
-        installMessage: "Готово",
+        installMessage: "Done",
         installedAt: new Date().toISOString(),
       });
       await saveState();
@@ -592,13 +630,13 @@ async function runInstall(instance) {
             : "setup"
           : "error",
         installProgress: 0,
-        installMessage: cancelled ? "Установка отменена" : null,
+        installMessage: cancelled ? "Installation cancelled" : null,
         lastError:
           cancelled
             ? null
             : error instanceof Error
               ? error.message
-              : "Ошибка установки",
+              : "Installation error",
       });
       await saveState();
       throw error;
@@ -668,7 +706,7 @@ async function resolveRequiredModVersions(rootVersion, profile, signal) {
     seen.add(version.id);
     resolved.push(version);
     if (resolved.length > 64) {
-      throw new Error("Слишком длинная цепочка зависимостей мода");
+      throw new Error("The mod dependency chain is too deep");
     }
     for (const dependency of version.dependencies || []) {
       if (dependency.dependency_type !== "required") continue;
@@ -681,9 +719,9 @@ async function resolveRequiredModVersions(rootVersion, profile, signal) {
 
 async function installModToInstance(project, targetInstance, task, signal) {
   const profile = loaderInfo(targetInstance);
-  if (profile.loader === "vanilla" || profile.loader === "без") {
+  if (profile.loader === "vanilla") {
     throw new Error(
-      "Для JAR-модов нужен Fabric, Quilt, Forge или NeoForge инстанс",
+      "JAR mods require a Fabric, Quilt, Forge, or NeoForge instance",
     );
   }
   const loaderFacet =
@@ -708,7 +746,7 @@ async function installModToInstance(project, targetInstance, task, signal) {
     versions.find((item) => item.version_type === "release") || versions[0];
   if (!version) {
     throw new Error(
-      `Нет версии мода для Minecraft ${profile.minecraftVersion} и ${profile.loader}`,
+      `No mod version is available for Minecraft ${profile.minecraftVersion} and ${profile.loader}`,
     );
   }
   const resolvedVersions = await resolveRequiredModVersions(
@@ -727,7 +765,7 @@ async function installModToInstance(project, targetInstance, task, signal) {
     const file = selectModFile(currentVersion);
     if (!file) {
       if (currentVersion.id === version.id) {
-        throw new Error("В версии проекта не найден JAR-файл");
+        throw new Error("No JAR file was found in the project version");
       }
       continue;
     }
@@ -754,7 +792,7 @@ async function installModToInstance(project, targetInstance, task, signal) {
           subtitle:
             index === 0
               ? `${targetInstance.name} · ${version.name}`
-              : `Зависимость ${index}/${resolvedVersions.length - 1}: ${currentVersion.name}`,
+              : `Dependency ${index}/${resolvedVersions.length - 1}: ${currentVersion.name}`,
         });
       },
     });
@@ -774,7 +812,7 @@ async function installModToInstance(project, targetInstance, task, signal) {
 
 function findInstance(id) {
   const instance = state.instances.find((item) => item.id === id);
-  if (!instance) throw new Error("Инстанс не найден");
+  if (!instance) throw new Error("Instance not found");
   return instance;
 }
 
@@ -824,7 +862,7 @@ async function listInstanceContent(id, kind = "mods") {
       send("instance:updated", structuredClone(instance));
     }
     return content.sort((left, right) =>
-      left.name.localeCompare(right.name, "ru"),
+      left.name.localeCompare(right.name, "en"),
     );
   } catch {
     return [];
@@ -865,7 +903,7 @@ async function endpointHealth(name, url) {
       ok: false,
       status: 0,
       latencyMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : "Ошибка сети",
+      error: error instanceof Error ? error.message : "Network error",
     };
   }
 }
@@ -925,7 +963,7 @@ async function buildDiagnostics() {
       platform: process.platform,
       release: os.release(),
       architecture: process.arch,
-      cpu: os.cpus()[0]?.model || "Неизвестно",
+      cpu: os.cpus()[0]?.model || "Unknown",
       cpuThreads: os.cpus().length,
       totalMemory: os.totalmem(),
       freeMemory: os.freemem(),
@@ -982,7 +1020,7 @@ function registerIpc() {
       settings.gameDirectory !== state.settings.gameDirectory
     ) {
       throw new Error(
-        "Папка инстансов изменяется через безопасный перенос данных",
+        "Change the instances directory using safe data migration",
       );
     }
     state.settings = {
@@ -994,7 +1032,7 @@ function registerIpc() {
   });
   ipcMain.handle("state:move-game-directory", async (_event, targetPath) => {
     if (runningGames.size || installControllers.size) {
-      throw new Error("Сначала завершите игры и активные установки");
+      throw new Error("Finish running games and active installations first");
     }
     const sourceRoot = path.resolve(state.settings.gameDirectory);
     const destinationRoot = path.resolve(String(targetPath || ""));
@@ -1008,7 +1046,7 @@ function registerIpc() {
       };
     }
     if (destinationRoot.startsWith(`${sourceRoot}${path.sep}`)) {
-      throw new Error("Новая папка не может находиться внутри текущей");
+      throw new Error("The new directory cannot be inside the current directory");
     }
     await fsp.mkdir(destinationRoot, { recursive: true });
     for (const instance of state.instances) {
@@ -1016,7 +1054,7 @@ function registerIpc() {
       const existing = await fsp.stat(destination).catch(() => null);
       if (existing) {
         throw new Error(
-          `В новой папке уже есть данные инстанса ${instance.name}`,
+          `The new directory already contains data for instance ${instance.name}`,
         );
       }
     }
@@ -1033,7 +1071,7 @@ function registerIpc() {
           progress: Math.round(
             (copied / Math.max(state.instances.length, 1)) * 100,
           ),
-          message: `Переношу ${instance.name}…`,
+          message: `Moving ${instance.name}…`,
         });
         const destination = path.join(destinationRoot, instance.id);
         copiedPaths.push(destination);
@@ -1056,7 +1094,7 @@ function registerIpc() {
     send("maintenance:progress", {
       operation: "move",
       progress: 100,
-      message: "Инстансы перенесены",
+      message: "Instances moved",
       done: true,
     });
     return {
@@ -1070,15 +1108,15 @@ function registerIpc() {
   ipcMain.handle("instance:create", async (_event, input) => {
     const instance = {
       id: crypto.randomUUID(),
-      name: String(input.name || "Новая сборка").slice(0, 48),
+      name: String(input.name || "New modpack").slice(0, 48),
       version: String(input.version || "1.21.1"),
       loader: String(input.loader || "Fabric"),
-      description: String(input.description || "Пользовательский инстанс"),
+      description: String(input.description || "Custom instance"),
       color: input.color || "lime",
       glyph: String(input.name || "NX").slice(0, 2).toUpperCase(),
       favorite: false,
       status: "setup",
-      lastPlayed: "Ещё не запускался",
+      lastPlayed: "Never played",
       playtimeMinutes: 0,
       modCount: 0,
     };
@@ -1087,7 +1125,7 @@ function registerIpc() {
     return structuredClone(instance);
   });
   ipcMain.handle("instance:delete", async (_event, id) => {
-    if (runningGames.has(id)) throw new Error("Сначала завершите игру");
+    if (runningGames.has(id)) throw new Error("Stop the game first");
     const instance = state.instances.find((item) => item.id === id);
     if (!instance) return false;
     const directory = path.join(state.settings.gameDirectory, id);
@@ -1110,10 +1148,10 @@ function registerIpc() {
   });
   ipcMain.handle("instance:update", async (_event, id, patch) => {
     const instance = findInstance(id);
-    if (runningGames.has(id)) throw new Error("Сначала завершите игру");
+    if (runningGames.has(id)) throw new Error("Stop the game first");
     if (typeof patch?.name === "string") {
       const name = patch.name.trim().slice(0, 48);
-      if (!name) throw new Error("Название инстанса не может быть пустым");
+      if (!name) throw new Error("The instance name cannot be empty");
       instance.name = name;
       instance.glyph = name.slice(0, 2).toUpperCase();
     }
@@ -1233,14 +1271,14 @@ function registerIpc() {
   });
   ipcMain.handle("instance:duplicate", async (_event, id) => {
     const source = state.instances.find((item) => item.id === id);
-    if (!source) throw new Error("Инстанс не найден");
+    if (!source) throw new Error("Instance not found");
     const duplicate = {
       ...structuredClone(source),
       id: crypto.randomUUID(),
-      name: `${source.name} — копия`,
+      name: `${source.name} — copy`,
       favorite: false,
       status: source.resolvedVersionId ? "ready" : "setup",
-      lastPlayed: "Ещё не запускался",
+      lastPlayed: "Never played",
       playtimeMinutes: 0,
     };
     const sourceDirectory = path.join(state.settings.gameDirectory, id);
@@ -1288,7 +1326,7 @@ function registerIpc() {
   ipcMain.handle("instance:storage-cleanup", async (_event, id) => {
     findInstance(id);
     if (runningGames.has(id) || installControllers.has(id)) {
-      throw new Error("Сначала завершите игру или установку");
+      throw new Error("Stop the game or installation first");
     }
     const result = await cleanupInstanceStorage({
       instancesRoot: state.settings.gameDirectory,
@@ -1318,7 +1356,7 @@ function registerIpc() {
     async (_event, id, filePath) => {
       const instance = findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       await createWorldSnapshot({
         instancesRoot: state.settings.gameDirectory,
@@ -1371,14 +1409,14 @@ function registerIpc() {
     async (_event, id, name, profileId) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       const bisect = await readBisectSession({
         instancesRoot: state.settings.gameDirectory,
         instanceId: id,
       });
       if (bisect) {
-        throw new Error("Сначала завершите или отмените Crash Bisect");
+        throw new Error("Finish or cancel Crash Bisect first");
       }
       return saveModProfile({
         instancesRoot: state.settings.gameDirectory,
@@ -1393,14 +1431,14 @@ function registerIpc() {
     async (_event, id, profileId) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       const bisect = await readBisectSession({
         instancesRoot: state.settings.gameDirectory,
         instanceId: id,
       });
       if (bisect) {
-        throw new Error("Сначала завершите или отмените Crash Bisect");
+        throw new Error("Finish or cancel Crash Bisect first");
       }
       const result = await applyModProfile({
         instancesRoot: state.settings.gameDirectory,
@@ -1427,7 +1465,7 @@ function registerIpc() {
     async (_event, id, transactionId) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       return rollbackModUpdate({
         instancesRoot: state.settings.gameDirectory,
@@ -1441,7 +1479,7 @@ function registerIpc() {
     async (_event, id, names) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       return disableSuspectMods({
         instancesRoot: state.settings.gameDirectory,
@@ -1460,7 +1498,7 @@ function registerIpc() {
   ipcMain.handle("instance:bisect-start", async (_event, id, names) => {
     findInstance(id);
     if (runningGames.has(id)) {
-      throw new Error("Сначала завершите игру");
+      throw new Error("Stop the game first");
     }
     return startBisect({
       instancesRoot: state.settings.gameDirectory,
@@ -1473,7 +1511,7 @@ function registerIpc() {
     async (_event, id, gameStarted) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите тестовый запуск");
+        throw new Error("Stop the test run first");
       }
       return reportBisectResult({
         instancesRoot: state.settings.gameDirectory,
@@ -1485,7 +1523,7 @@ function registerIpc() {
   ipcMain.handle("instance:bisect-cancel", async (_event, id) => {
     findInstance(id);
     if (runningGames.has(id)) {
-      throw new Error("Сначала завершите тестовый запуск");
+      throw new Error("Stop the test run first");
     }
     return cancelBisect({
       instancesRoot: state.settings.gameDirectory,
@@ -1497,7 +1535,7 @@ function registerIpc() {
     async (_event, id, disableCulprit) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       return finishBisect({
         instancesRoot: state.settings.gameDirectory,
@@ -1516,7 +1554,7 @@ function registerIpc() {
   ipcMain.handle("instance:world-snapshot-create", async (_event, id) => {
     findInstance(id);
     if (runningGames.has(id)) {
-      throw new Error("Сначала завершите игру, чтобы снимок был целостным");
+      throw new Error("Stop the game first so the snapshot remains consistent");
     }
     return createWorldSnapshot({
       instancesRoot: state.settings.gameDirectory,
@@ -1536,7 +1574,7 @@ function registerIpc() {
     async (_event, id, snapshotId) => {
       findInstance(id);
       if (runningGames.has(id)) {
-        throw new Error("Сначала завершите игру");
+        throw new Error("Stop the game first");
       }
       return restoreWorldSnapshot({
         instancesRoot: state.settings.gameDirectory,
@@ -1556,7 +1594,7 @@ function registerIpc() {
     const instancesRoot = path.resolve(state.settings.gameDirectory);
     const source = path.resolve(filePath);
     if (!source.startsWith(`${instancesRoot}${path.sep}`)) {
-      throw new Error("Файл находится вне папки инстансов");
+      throw new Error("The file is outside the instances directory");
     }
     const destination = source.endsWith(".disabled")
       ? source.replace(/\.disabled$/, "")
@@ -1568,14 +1606,14 @@ function registerIpc() {
     const instancesRoot = path.resolve(state.settings.gameDirectory);
     const target = path.resolve(filePath);
     if (!target.startsWith(`${instancesRoot}${path.sep}`)) {
-      throw new Error("Файл находится вне папки инстансов");
+      throw new Error("The file is outside the instances directory");
     }
     await shell.trashItem(target);
     return true;
   });
   ipcMain.handle("instance:repair", async (_event, id) => {
     const instance = findInstance(id);
-    if (runningGames.has(id)) throw new Error("Сначала завершите игру");
+    if (runningGames.has(id)) throw new Error("Stop the game first");
     await runInstall(instance);
     return structuredClone(instance);
   });
@@ -1598,7 +1636,7 @@ function registerIpc() {
   ipcMain.handle("instance:update-preview", async (_event, id) => {
     const instance = findInstance(id);
     if (runningGames.has(id)) {
-      throw new Error("Сначала завершите игру");
+      throw new Error("Stop the game first");
     }
     const { modpackService } = createServices();
     return modpackService.previewProjectUpdate({
@@ -1615,9 +1653,9 @@ function registerIpc() {
   });
   ipcMain.handle("instance:update-pack", async (_event, id) => {
     const instance = findInstance(id);
-    if (runningGames.has(id)) throw new Error("Сначала завершите игру");
+    if (runningGames.has(id)) throw new Error("Stop the game first");
     if (!instance.sourceProjectId) {
-      throw new Error("Инстанс не связан с проектом Modrinth");
+      throw new Error("The instance is not linked to a Modrinth project");
     }
     const originalStatus = instance.resolvedVersionId ? "ready" : "setup";
     const controller = new AbortController();
@@ -1625,7 +1663,7 @@ function registerIpc() {
     instanceUpdate(instance, {
       status: "installing",
       installProgress: 1,
-      installMessage: "Создаю точку восстановления…",
+      installMessage: "Creating a restore point…",
     });
     await saveState();
     try {
@@ -1643,7 +1681,7 @@ function registerIpc() {
             instanceId: id,
             stage: "backup",
             progress: Math.max(1, Math.round(progress.progress * 0.1)),
-            message: "Создаю точку восстановления перед обновлением…",
+            message: "Creating a restore point before the update…",
           }),
       });
       const automaticBackups = (
@@ -1684,7 +1722,7 @@ function registerIpc() {
       Object.assign(instance, result.instance, {
         status: "ready",
         installProgress: 100,
-        installMessage: "Сборка обновлена",
+        installMessage: "Modpack updated",
         lastError: null,
       });
       await saveState();
@@ -1702,13 +1740,13 @@ function registerIpc() {
       instanceUpdate(instance, {
         status: originalStatus,
         installProgress: 0,
-        installMessage: cancelled ? "Обновление отменено" : null,
+        installMessage: cancelled ? "Update cancelled" : null,
         lastError:
           cancelled
             ? null
             : error instanceof Error
               ? error.message
-              : "Ошибка обновления сборки",
+              : "Modpack update error",
       });
       await saveState();
       throw error;
@@ -1718,18 +1756,18 @@ function registerIpc() {
   });
   ipcMain.handle("instance:backup", async (_event, id) => {
     const instance = findInstance(id);
-    if (runningGames.has(id)) throw new Error("Сначала завершите игру");
+    if (runningGames.has(id)) throw new Error("Stop the game first");
     const safeName =
       instance.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim() ||
       "Onyx instance";
     const date = new Date().toISOString().slice(0, 10);
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: `Резервная копия — ${instance.name}`,
+      title: `Backup — ${instance.name}`,
       defaultPath: path.join(
         app.getPath("documents"),
         `${safeName}-${date}.onyxpack`,
       ),
-      filters: [{ name: "Резервная копия Onyx", extensions: ["onyxpack"] }],
+      filters: [{ name: "Onyx backup", extensions: ["onyxpack"] }],
     });
     if (result.canceled || !result.filePath) return null;
     const backup = await createInstanceBackup({
@@ -1740,14 +1778,14 @@ function registerIpc() {
         send("maintenance:progress", {
           instanceId: id,
           operation: "backup",
-          message: `Создаю резервную копию ${instance.name}`,
+          message: `Creating a backup of ${instance.name}`,
           ...progress,
         }),
     });
     send("maintenance:progress", {
       instanceId: id,
       operation: "backup",
-      message: "Резервная копия готова",
+      message: "Backup ready",
       progress: 100,
       done: true,
     });
@@ -1756,10 +1794,10 @@ function registerIpc() {
   ipcMain.handle("instance:import-backup", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      title: "Импорт резервной копии Onyx",
+      title: "Import Onyx backup",
       filters: [
-        { name: "Резервная копия Onyx", extensions: ["onyxpack"] },
-        { name: "ZIP-архив", extensions: ["zip"] },
+        { name: "Onyx backup", extensions: ["onyxpack"] },
+        { name: "ZIP archive", extensions: ["zip"] },
       ],
     });
     if (result.canceled) return null;
@@ -1770,7 +1808,7 @@ function registerIpc() {
       onProgress: (progress) =>
         send("maintenance:progress", {
           operation: "import",
-          message: `Импортирую ${path.basename(backupPath)}`,
+          message: `Importing ${path.basename(backupPath)}`,
           ...progress,
         }),
     });
@@ -1782,7 +1820,7 @@ function registerIpc() {
     send("maintenance:progress", {
       instanceId: instance.id,
       operation: "import",
-      message: "Инстанс импортирован",
+      message: "Instance imported",
       progress: 100,
       done: true,
     });
@@ -1791,7 +1829,7 @@ function registerIpc() {
   ipcMain.handle("instance:sync-export", async (_event, id) => {
     const instance = findInstance(id);
     if (runningGames.has(id)) {
-      throw new Error("Сначала завершите игру");
+      throw new Error("Stop the game first");
     }
     const items = await listInstanceContent(id, "mods");
     const mods = await identifySyncMods(items);
@@ -1806,7 +1844,7 @@ function registerIpc() {
         `${safeName}.onyxprofile`,
       ),
       filters: [
-        { name: "Профиль Onyx Sync", extensions: ["onyxprofile"] },
+        { name: "Onyx Sync profile", extensions: ["onyxprofile"] },
       ],
     });
     if (result.canceled || !result.filePath) return null;
@@ -1824,9 +1862,9 @@ function registerIpc() {
   ipcMain.handle("instance:sync-import", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      title: "Импорт профиля Onyx Sync",
+      title: "Import Onyx Sync profile",
       filters: [
-        { name: "Профиль Onyx Sync", extensions: ["onyxprofile"] },
+        { name: "Onyx Sync profile", extensions: ["onyxprofile"] },
         { name: "JSON", extensions: ["json"] },
       ],
     });
@@ -1834,7 +1872,7 @@ function registerIpc() {
     const profilePath = result.filePaths[0];
     const stats = await fsp.stat(profilePath);
     if (stats.size > 5 * 1024 * 1024) {
-      throw new Error("Профиль Onyx Sync слишком большой");
+      throw new Error("The Onyx Sync profile is too large");
     }
     const profile = validateSyncProfile(
       JSON.parse(await fsp.readFile(profilePath, "utf8")),
@@ -1854,7 +1892,7 @@ function registerIpc() {
       settings: source.settings,
       favorite: false,
       status: "setup",
-      lastPlayed: "Ещё не запускался",
+      lastPlayed: "Never played",
       playtimeMinutes: 0,
       modCount: 0,
       importedAt: new Date().toISOString(),
@@ -1892,7 +1930,7 @@ function registerIpc() {
     } catch (error) {
       instance.status = instance.resolvedVersionId ? "ready" : "error";
       instance.lastError =
-        error instanceof Error ? error.message : "Ошибка импорта Onyx Sync";
+        error instanceof Error ? error.message : "Onyx Sync import error";
       await saveState();
       send("instance:updated", structuredClone(instance));
       throw error;
@@ -1902,20 +1940,20 @@ function registerIpc() {
   ipcMain.handle("system:choose-directory", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory", "createDirectory"],
-      title: "Папка игровых инстансов Onyx",
+      title: "Onyx game instances directory",
     });
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle("system:choose-java", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      title: "Выберите исполняемый файл Java",
+      title: "Select the Java executable",
       filters: [{ name: "Java", extensions: ["exe"] }],
     });
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle("system:open-path", async (_event, targetPath) => {
-    if (!targetPath) return "Путь не указан";
+    if (!targetPath) return "No path provided";
     return shell.openPath(targetPath);
   });
   ipcMain.handle("system:java-status", async () => {
@@ -1937,12 +1975,12 @@ function registerIpc() {
   ipcMain.handle("system:export-diagnostics", async () => {
     const diagnostics = await buildDiagnostics();
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: "Сохранить диагностику Onyx",
+      title: "Save Onyx diagnostics",
       defaultPath: path.join(
         app.getPath("documents"),
         `onyx-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
       ),
-      filters: [{ name: "Отчёт JSON", extensions: ["json"] }],
+      filters: [{ name: "JSON report", extensions: ["json"] }],
     });
     if (result.canceled || !result.filePath) return null;
     await fsp.writeFile(
@@ -1974,6 +2012,51 @@ function registerIpc() {
     authService.cancelLogin(sessionId),
   );
   ipcMain.handle("auth:list", () => authService.listAccounts());
+  ipcMain.handle("auth:profile-refresh", async (_event, accountId) => {
+    const profile = await authService.refreshProfile(accountId);
+    if (state.profile.uuid === profile.uuid) {
+      state.profile = profile;
+      await saveState();
+      send("auth:changed", profile);
+    }
+    return profile;
+  });
+  ipcMain.handle("auth:offline-add", async (_event, name) => {
+    const profile = await authService.addOfflineAccount(name);
+    state.profile = profile;
+    await saveState();
+    send("auth:changed", profile);
+    return profile;
+  });
+  ipcMain.handle("auth:skin-select", async (_event, accountId, variant) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Select a Minecraft skin",
+      properties: ["openFile"],
+      filters: [{ name: "PNG skin", extensions: ["png"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const profile = await authService.setSkinFromFile(
+      result.filePaths[0],
+      variant,
+      accountId,
+    );
+    if (profile.kind === "offline") {
+      await Promise.all(
+        state.instances.map((instance) =>
+          syncOfflineSkin(
+            profile,
+            path.join(state.settings.gameDirectory, instance.id),
+          ),
+        ),
+      );
+    }
+    if (state.profile.uuid === profile.uuid) {
+      state.profile = profile;
+      await saveState();
+      send("auth:changed", profile);
+    }
+    return profile;
+  });
   ipcMain.handle("auth:switch", async (_event, accountId) => {
     const profile = await authService.switchAccount(accountId);
     state.profile = profile;
@@ -2049,7 +2132,7 @@ function registerIpc() {
         projectId: project.project_id,
         projectType: project.project_type,
         name: project.title,
-        subtitle: "Подготовка установки",
+        subtitle: "Preparing installation",
         iconUrl: project.icon_url || null,
         progress: 1,
         status: "queued",
@@ -2076,7 +2159,7 @@ function registerIpc() {
               state.instances.find((item) => item.status === "ready");
             if (!target) {
               throw new Error(
-                "Сначала установите игровой инстанс, затем добавьте в него мод",
+                "Install the game instance before adding a mod",
               );
             }
             const result = await installModToInstance(
@@ -2089,8 +2172,8 @@ function registerIpc() {
               status: "done",
               progress: 100,
               subtitle: result.dependencies
-                ? `Установлено в «${target.name}» · зависимостей: ${result.dependencies}`
-                : `Установлено в «${target.name}»`,
+                ? `Installed in “${target.name}” · dependencies: ${result.dependencies}`
+                : `Installed in “${target.name}”`,
               localPath: result.destination,
             });
             const content = await listInstanceContent(target.id);
@@ -2101,7 +2184,7 @@ function registerIpc() {
             const { modpackService } = createServices();
             taskUpdate(task, {
               status: "downloading",
-              subtitle: "Загрузка сборки",
+              subtitle: "Downloading modpack",
             });
             const instance = await modpackService.installProject({
               project,
@@ -2122,7 +2205,7 @@ function registerIpc() {
             taskUpdate(task, {
               status: "done",
               progress: 100,
-              subtitle: "Сборка установлена и готова к игре",
+              subtitle: "The modpack is installed and ready to play",
               localPath: path.join(
                 state.settings.gameDirectory,
                 instance.id,
@@ -2139,10 +2222,10 @@ function registerIpc() {
             status: cancelled ? "cancelled" : "error",
             error:
               cancelled
-                ? "Установка отменена пользователем"
+                ? "Installation cancelled by the user"
                 : error instanceof Error
                   ? error.message
-                  : "Неизвестная ошибка установки",
+                  : "Unknown installation error",
           });
           if (project.project_type === "modpack" && task.instanceId) {
             await fsp
@@ -2163,10 +2246,10 @@ function registerIpc() {
   ipcMain.handle("catalog:import-pack", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      title: "Импорт сборки Modrinth",
+      title: "Import Modrinth modpack",
       filters: [
-        { name: "Сборка Modrinth", extensions: ["mrpack"] },
-        { name: "ZIP-архив", extensions: ["zip"] },
+        { name: "Modrinth modpack", extensions: ["mrpack"] },
+        { name: "ZIP archive", extensions: ["zip"] },
       ],
     });
     if (result.canceled) return null;
@@ -2174,7 +2257,7 @@ function registerIpc() {
     const task = {
       id: crypto.randomUUID(),
       name: path.basename(packPath),
-      subtitle: "Импорт локальной сборки",
+      subtitle: "Importing local modpack",
       progress: 1,
       status: "installing",
       createdAt: new Date().toISOString(),
@@ -2204,7 +2287,7 @@ function registerIpc() {
         taskUpdate(task, {
           status: "done",
           progress: 100,
-          subtitle: "Сборка импортирована",
+          subtitle: "Modpack imported",
           instanceId: instance.id,
           localPath: path.join(state.settings.gameDirectory, instance.id),
         });
@@ -2217,10 +2300,10 @@ function registerIpc() {
           status: cancelled ? "cancelled" : "error",
           error:
             cancelled
-              ? "Импорт отменён пользователем"
+              ? "Import cancelled by the user"
               : error instanceof Error
                 ? error.message
-                : "Ошибка импорта сборки",
+                : "Modpack import error",
         });
         if (task.instanceId) {
           await fsp
@@ -2245,7 +2328,7 @@ function registerIpc() {
     if (task) {
       taskUpdate(task, {
         status: "cancelled",
-        error: "Операция отменена пользователем",
+        error: "Operation cancelled by the user",
       });
       await saveState();
     }
@@ -2261,7 +2344,7 @@ function registerIpc() {
 
   ipcMain.handle("launcher:preflight", async (_event, instanceId) => {
     const instance = state.instances.find((item) => item.id === instanceId);
-    if (!instance) throw new Error("Инстанс не найден");
+    if (!instance) throw new Error("Instance not found");
     return preflightInstance(instance);
   });
   ipcMain.handle("launcher:play", async (_event, instanceId) => {
@@ -2271,7 +2354,7 @@ function registerIpc() {
       return {
         ok: false,
         reason: "already-running",
-        message: "Этот инстанс уже запущен",
+        message: "This instance is already running",
       };
     }
     try {
@@ -2279,7 +2362,7 @@ function registerIpc() {
         instanceId,
         stage: "preflight",
         progress: 1,
-        message: "Проверяю инстанс перед запуском…",
+        message: "Checking the instance before launch…",
       });
       const health = await preflightInstance(instance);
       if (!health.canLaunch) {
@@ -2315,7 +2398,7 @@ function registerIpc() {
           instanceId,
           stage: "world-guard",
           progress: 100,
-          message: "World Guard сохраняет миры перед запуском с изменёнными модами…",
+          message: "World Guard is saving worlds before launching with changed mods…",
         });
         await createWorldSnapshot({
           instancesRoot: state.settings.gameDirectory,
@@ -2326,15 +2409,20 @@ function registerIpc() {
       }
       let account = null;
       let demo = true;
-      if (state.profile.kind === "microsoft") {
-        send("launcher:progress", {
-          instanceId,
-          stage: "auth",
-          progress: 100,
-          message: "Обновляю сессию Microsoft…",
-        });
+      if (state.profile.kind === "microsoft" || state.profile.kind === "offline") {
+        if (state.profile.kind === "microsoft") {
+          send("launcher:progress", {
+            instanceId,
+            stage: "auth",
+            progress: 100,
+            message: "Refreshing the Microsoft session…",
+          });
+        }
         account = await authService.getLaunchAccount();
-        if (!account) throw new Error("Войдите в Microsoft-аккаунт");
+        if (!account) throw new Error("Select a saved account");
+        if (state.profile.kind === "offline") {
+          await syncOfflineSkin(state.profile, instanceDirectory);
+        }
         demo = false;
       }
       const { minecraftService } = createServices();
@@ -2443,9 +2531,9 @@ function registerIpc() {
               diagnoses.unshift({
                 code: "recent-mod-changes",
                 severity: "warning",
-                title: "Подозрение на недавно изменённые моды",
+                title: "Recently changed mods may be responsible",
                 message:
-                  "После последнего успешного запуска изменились моды. Onyx может временно отключить их и повторить запуск.",
+                  "Mods changed after the last successful launch. Onyx can temporarily disable them and retry.",
                 suspects: suspects.slice(0, 12),
               });
             }
@@ -2495,7 +2583,7 @@ function registerIpc() {
       runningGames.set(instanceId, launch);
       instanceUpdate(instance, {
         status: "running",
-        lastPlayed: "Только что",
+        lastPlayed: "Just now",
         lastLogPath: launch.logPath,
         javaPath: launch.executable,
       });
@@ -2510,21 +2598,21 @@ function registerIpc() {
         pid: launch.child.pid,
         demo,
         message: demo
-          ? "Игра запущена в официальном демо-режиме"
-          : "Игра запущена",
+          ? "Game launched in official demo mode"
+          : "Game launched",
       };
     } catch (error) {
       instanceUpdate(instance, {
         status: instance.resolvedVersionId ? "ready" : "error",
         lastError:
-          error instanceof Error ? error.message : "Ошибка запуска игры",
+          error instanceof Error ? error.message : "Game launch error",
       });
       await saveState();
       return {
         ok: false,
         reason: "launch-failed",
         message:
-          error instanceof Error ? error.message : "Не удалось запустить игру",
+          error instanceof Error ? error.message : "Failed to launch the game",
       };
     }
   });
@@ -2573,16 +2661,16 @@ function registerIpc() {
       const safeName =
         String(instance.name || "instance")
           .toLowerCase()
-          .replace(/[^a-zа-яё0-9]+/gi, "-")
+          .replace(/[^a-z0-9]+/gi, "-")
           .replace(/^-+|-+$/g, "")
           .slice(0, 42) || "instance";
       const result = await dialog.showSaveDialog(mainWindow, {
-        title: "Сохранить пакет диагностики Onyx",
+        title: "Save Onyx diagnostics bundle",
         defaultPath: path.join(
           app.getPath("documents"),
           `onyx-support-${safeName}-${new Date().toISOString().slice(0, 10)}.zip`,
         ),
-        filters: [{ name: "Пакет диагностики ZIP", extensions: ["zip"] }],
+        filters: [{ name: "ZIP diagnostics bundle", extensions: ["zip"] }],
       });
       if (result.canceled || !result.filePath) return null;
 

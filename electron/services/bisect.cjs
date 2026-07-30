@@ -7,7 +7,7 @@ function resolveInstance(instancesRoot, instanceId) {
   const root = path.resolve(instancesRoot);
   const instanceDirectory = path.resolve(root, String(instanceId));
   if (!instanceDirectory.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Инстанс находится вне управляемой папки");
+    throw new Error("The instance is outside the managed directory");
   }
   return instanceDirectory;
 }
@@ -133,7 +133,7 @@ async function startBisect({ instancesRoot, instanceId, names }) {
     ...new Set(requested.map(safeModName).filter((name) => available.has(name))),
   ].sort((left, right) => left.localeCompare(right));
   if (candidates.length < 2) {
-    throw new Error("Для поиска конфликта нужны хотя бы два включённых мода");
+    throw new Error("At least two enabled mods are required to find a conflict");
   }
   const now = new Date().toISOString();
   const session = {
@@ -159,7 +159,7 @@ async function reportBisectResult({
   const instanceDirectory = resolveInstance(instancesRoot, instanceId);
   const session = await readBisectSession({ instancesRoot, instanceId });
   if (!session || session.status !== "testing") {
-    throw new Error("Активная проверка модов не найдена");
+    throw new Error("No active mod check was found");
   }
   await restoreTesting(instanceDirectory, session);
   const testing = new Set(session.testing);
@@ -169,7 +169,7 @@ async function reportBisectResult({
   if (!session.candidates.length) {
     await fsp.rm(sessionPath(instanceDirectory), { force: true });
     throw new Error(
-      "Результаты противоречат друг другу. Все моды восстановлены — начните проверку заново.",
+      "The results conflict. All mods were restored; start the check again.",
     );
   }
   session.round += 1;
@@ -189,7 +189,7 @@ async function finishBisect({ instancesRoot, instanceId, disableCulprit }) {
   const instanceDirectory = resolveInstance(instancesRoot, instanceId);
   const session = await readBisectSession({ instancesRoot, instanceId });
   if (!session || session.status !== "found" || !session.culprit) {
-    throw new Error("Виновник ещё не найден");
+    throw new Error("The offending mod has not been identified yet");
   }
   if (disableCulprit) {
     await setModEnabled(instanceDirectory, session.culprit, false);

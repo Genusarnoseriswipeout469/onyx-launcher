@@ -14,7 +14,7 @@ function safeDestination(root, relativePath) {
     destination !== rootPath &&
     !destination.startsWith(`${rootPath}${path.sep}`)
   ) {
-    throw new Error(`Небезопасный путь внутри архива: ${relativePath}`);
+    throw new Error(`Unsafe path inside the archive: ${relativePath}`);
   }
   return destination;
 }
@@ -64,7 +64,7 @@ function safeLinkTarget(root, destination, linkName) {
   const target = path.resolve(path.dirname(destination), linkName);
   const rootPath = path.resolve(root);
   if (target !== rootPath && !target.startsWith(`${rootPath}${path.sep}`)) {
-    throw new Error(`Небезопасная ссылка внутри архива: ${linkName}`);
+    throw new Error(`Unsafe link inside the archive: ${linkName}`);
   }
   return target;
 }
@@ -131,7 +131,7 @@ async function extractArchive(archivePath, destination, options = {}) {
   if (normalized.endsWith(".tar.gz") || normalized.endsWith(".tgz")) {
     return extractTarGz(archivePath, destination, options);
   }
-  throw new Error(`Неподдерживаемый формат архива: ${path.basename(archivePath)}`);
+  throw new Error(`Unsupported archive format: ${path.basename(archivePath)}`);
 }
 
 async function findFile(root, predicate, maxDepth = 4) {

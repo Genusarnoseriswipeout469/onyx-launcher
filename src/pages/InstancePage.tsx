@@ -1027,7 +1027,7 @@ export function InstancePage({
   );
   const updates = content.filter((item) => item.update).length;
   const displayName =
-    instance.id === "vanilla-start" && instance.name === "Чистая игра"
+    instance.id === "vanilla-start" && instance.name === "Pure Game"
       ? t("home.defaultName")
       : instance.name;
 

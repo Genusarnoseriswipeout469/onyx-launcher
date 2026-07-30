@@ -15,7 +15,7 @@ function snapshotDirectory(worldGuardRoot, instanceId) {
 function safeSnapshotId(value) {
   const id = String(value || "");
   if (!/^[a-zA-Z0-9_-]{8,96}$/.test(id)) {
-    throw new Error("Некорректный идентификатор снимка мира");
+    throw new Error("Invalid world snapshot ID");
   }
   return id;
 }
@@ -218,7 +218,7 @@ async function restoreWorldSnapshot({
     manifest.instanceId !== String(instanceId) ||
     manifest.id !== safeId
   ) {
-    throw new Error("Снимок мира повреждён или относится к другому инстансу");
+    throw new Error("The world snapshot is corrupted or belongs to another instance");
   }
   const safetySnapshot = await createWorldSnapshot({
     instancesRoot,

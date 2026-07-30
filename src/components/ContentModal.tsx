@@ -68,7 +68,7 @@ export function ContentModal({
         kind === "mods" &&
         checkUpdates &&
         localItems.length &&
-        !/vanilla|без/i.test(instance.loader)
+        !/vanilla/i.test(instance.loader)
       ) {
         setChecking(true);
         try {
@@ -188,7 +188,7 @@ export function ContentModal({
             <div className="modal__eyebrow">
               <Package size={14} /> {t("content.eyebrow")}
             </div>
-            <h2>{t("content.title", { name: instance.id === "vanilla-start" && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name })}</h2>
+            <h2>{t("content.title", { name: instance.id === "vanilla-start" && instance.name === "Pure Game" ? t("home.defaultName") : instance.name })}</h2>
             <p className="modal__subtitle">{t("content.subtitle")}</p>
 
             <div className="content-tabs">
@@ -307,7 +307,7 @@ export function ContentModal({
                             ` · ${entry.versionNumber}`}
                           {" · "}
                           {new Date(entry.createdAt).toLocaleString(
-                            locale === "ru" ? "ru-RU" : "en-US",
+                            "en-US",
                             {
                               day: "2-digit",
                               month: "short",

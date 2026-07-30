@@ -72,8 +72,8 @@ export function InstanceSettingsModal({
 
   useEffect(() => {
     if (!instance) return;
-    setName(instance.id === "vanilla-start" && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name);
-    setDescription(instance.id === "vanilla-start" && instance.description === "Minecraft без модификаций" ? t("home.defaultDescription") : instance.description);
+    setName(instance.id === "vanilla-start" && instance.name === "Pure Game" ? t("home.defaultName") : instance.name);
+    setDescription(instance.id === "vanilla-start" && instance.description === "Minecraft without modifications" ? t("home.defaultDescription") : instance.description);
     setColor(instance.color);
     setMemory(instance.settings?.memory ?? globalSettings.memory);
     setWidth(instance.settings?.windowWidth ?? globalSettings.windowWidth);
@@ -180,7 +180,7 @@ export function InstanceSettingsModal({
             <div className="modal__eyebrow">
               <SlidersHorizontal size={14} /> {t("instanceSettings.eyebrow")}
             </div>
-            <h2>{instance.id === "vanilla-start" && instance.name === "Чистая игра" ? t("home.defaultName") : instance.name}</h2>
+            <h2>{instance.id === "vanilla-start" && instance.name === "Pure Game" ? t("home.defaultName") : instance.name}</h2>
             <p className="modal__subtitle">{t("instanceSettings.subtitle")}</p>
 
             <div className="instance-settings-scroll">

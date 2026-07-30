@@ -13,7 +13,6 @@ import {
   FileJson,
   FolderOpen,
   Gauge,
-  Globe2,
   HardDrive,
   HeartPulse,
   Info,
@@ -172,29 +171,7 @@ export function SettingsPage({
                 title={t("settings.general.title")}
                 subtitle={t("settings.general.subtitle")}
               />
-              <SettingsGroup title={t("settings.language.group")}>
-                <div className="language-setting">
-                  <span className="setting-row__icon">
-                    <Globe2 size={17} />
-                  </span>
-                  <div>
-                    <strong>{t("settings.language.title")}</strong>
-                    <p>{t("settings.language.hint")}</p>
-                  </div>
-                  <div className="language-toggle" aria-label={t("settings.language.title")}>
-                    {(["ru", "en"] as const).map((language) => (
-                      <button
-                        key={language}
-                        className={settings.language === language ? "is-active" : ""}
-                        aria-pressed={settings.language === language}
-                        onClick={() => void update({ language })}
-                      >
-                        {language === "ru" ? "RU" : "EN"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </SettingsGroup>
+
               <SettingsGroup title={t("settings.behavior")}>
                 <ToggleRow
                   icon={Cpu}
@@ -491,7 +468,7 @@ export function SettingsPage({
                       icon={Database}
                       label={t("settings.diagnostics.data")}
                       value={formatBytes(diagnostics.storage.data.bytes, locale)}
-                      detail={t("settings.diagnostics.fileCount", { count: diagnostics.storage.data.files.toLocaleString(locale === "ru" ? "ru-RU" : "en-US") })}
+                      detail={t("settings.diagnostics.fileCount", { count: diagnostics.storage.data.files.toLocaleString("en-US") })}
                       progress={100}
                     />
                   </div>
@@ -571,7 +548,7 @@ export function SettingsPage({
                     <span>
                       {t("settings.report.generated", {
                         time: new Date(diagnostics.generatedAt).toLocaleTimeString(
-                          locale === "ru" ? "ru-RU" : "en-US",
+                          "en-US",
                           { hour: "2-digit", minute: "2-digit" },
                         ),
                       })}
@@ -602,18 +579,24 @@ export function SettingsPage({
                   <h3>
                     {profile.kind === "microsoft"
                       ? profile.name
-                      : t("profile.local")}
+                      : profile.kind === 'offline'
+                        ? profile.name
+                        : t('profile.local')}
                   </h3>
                   <p>
                     {profile.kind === "microsoft"
-                      ? t("settings.account.connected")
-                      : t("settings.account.local")}
+                      ? t('settings.account.connected')
+                      : profile.kind === 'offline'
+                        ? t('auth.offline.connected')
+                        : t('settings.account.local')}
                   </p>
                 </div>
                 <button className="button button--primary" onClick={onAccount}>
-                  {profile.kind === "microsoft"
-                    ? t("settings.account.manage")
-                    : t("settings.account.connect")}
+                    {profile.kind === "microsoft"
+                      ? t('settings.account.manage')
+                      : profile.kind === 'offline'
+                        ? t('settings.account.manage')
+                        : t('settings.account.connect')}
                 </button>
               </div>
               <div className="security-note">

@@ -72,6 +72,6 @@ app.whenReady().then(async () => {
 });
 
 setTimeout(() => {
-  process.stderr.write("Не удалось сгенерировать иконку за 15 секунд.\n");
+  process.stderr.write("Failed to generate the icon within 15 seconds.\n");
   app.exit(1);
 }, 15_000).unref();

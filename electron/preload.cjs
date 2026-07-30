@@ -96,6 +96,11 @@ contextBridge.exposeInMainWorld("onyx", {
     cancel: (sessionId) => ipcRenderer.invoke("auth:cancel", sessionId),
     signOut: () => ipcRenderer.invoke("auth:sign-out"),
     list: () => ipcRenderer.invoke("auth:list"),
+    refreshProfile: (accountId) =>
+      ipcRenderer.invoke("auth:profile-refresh", accountId),
+    addOffline: (name) => ipcRenderer.invoke("auth:offline-add", name),
+    chooseSkin: (accountId, variant) =>
+      ipcRenderer.invoke("auth:skin-select", accountId, variant),
     switch: (accountId) => ipcRenderer.invoke("auth:switch", accountId),
     remove: (accountId) => ipcRenderer.invoke("auth:remove", accountId),
   },

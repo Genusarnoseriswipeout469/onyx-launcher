@@ -54,7 +54,7 @@ async function sampleWindowsProcess(pid) {
   ]);
   const [rssBytes, cpuTimeMs] = output.split("|").map(Number);
   if (!Number.isFinite(rssBytes) || !Number.isFinite(cpuTimeMs)) {
-    throw new Error("Не удалось прочитать метрики процесса Minecraft");
+    throw new Error("Failed to read Minecraft process metrics");
   }
   return { rssBytes, cpuTimeMs };
 }
@@ -69,7 +69,7 @@ async function sampleDarwinProcess(pid) {
     String(pid),
   ]);
   const match = output.match(/^\s*(\d+)\s+(.+?)\s*$/);
-  if (!match) throw new Error("Не удалось прочитать метрики процесса");
+  if (!match) throw new Error("Failed to read process metrics");
   return {
     rssBytes: Number(match[1]) * 1024,
     cpuTimeMs: parseCpuTime(match[2]),
@@ -78,12 +78,12 @@ async function sampleDarwinProcess(pid) {
 
 async function sampleProcess(pid, platform = process.platform) {
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error("Некорректный PID процесса Minecraft");
+    throw new Error("Invalid Minecraft process ID");
   }
   if (platform === "linux") return sampleLinuxProcess(pid);
   if (platform === "win32") return sampleWindowsProcess(pid);
   if (platform === "darwin") return sampleDarwinProcess(pid);
-  throw new Error(`Сбор метрик не поддерживается на ${platform}`);
+  throw new Error(`Metrics collection is not supported on ${platform}`);
 }
 
 function downsampleTimeline(values, limit = 60) {

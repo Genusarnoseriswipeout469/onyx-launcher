@@ -16,7 +16,7 @@ import {
   UserRound,
   Wifi,
 } from "lucide-react";
-import { useI18n, type Locale } from "../i18n";
+import { useI18n } from "../i18n";
 import type { Profile, SystemDiagnostics } from "../types";
 import { formatBytes } from "../utils";
 
@@ -25,15 +25,13 @@ export function OnboardingModal({
   profile,
   onFinish,
   onAccount,
-  onLanguageChange,
 }: {
   open: boolean;
   profile: Profile;
   onFinish: (memory: number) => Promise<void>;
   onAccount: () => void;
-  onLanguageChange: (language: Locale) => Promise<void>;
 }) {
-  const { locale, setLocale, t } = useI18n();
+  const { locale, t } = useI18n();
   const [step, setStep] = useState(0);
   const [diagnostics, setDiagnostics] = useState<SystemDiagnostics | null>(
     null,
@@ -92,21 +90,7 @@ export function OnboardingModal({
               </span>
               <strong>ONYX</strong>
               <div className="onboarding-toolbar">
-                <div className="language-toggle language-toggle--compact" aria-label={t("onboarding.language")}>
-                  {(["ru", "en"] as const).map((language) => (
-                    <button
-                      key={language}
-                      className={locale === language ? "is-active" : ""}
-                      aria-pressed={locale === language}
-                      onClick={() => {
-                        setLocale(language);
-                        void onLanguageChange(language);
-                      }}
-                    >
-                      {language === "ru" ? "RU" : "EN"}
-                    </button>
-                  ))}
-                </div>
+
                 <small>{t("onboarding.firstRun")}</small>
               </div>
             </div>

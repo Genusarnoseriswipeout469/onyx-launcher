@@ -14,7 +14,7 @@ const {
 
 function profileFromDependencies(dependencies = {}) {
   if (!dependencies.minecraft) {
-    throw new Error("В сборке не указана версия Minecraft");
+    throw new Error("The modpack does not specify a Minecraft version");
   }
   const candidates = [
     ["fabric", dependencies["fabric-loader"]],
@@ -121,7 +121,7 @@ class ModpackService {
       { signal },
     );
     const release = selectPackRelease(versions);
-    if (!release) throw new Error("У проекта нет установочного файла .mrpack");
+    if (!release) throw new Error("The project does not provide an installable .mrpack file");
     const file =
       release.files.find(
         (item) => item.primary && item.filename.endsWith(".mrpack"),
@@ -144,7 +144,7 @@ class ModpackService {
         onProgress?.({
           stage: "pack",
           progress: total ? Math.round((received / total) * 10) : 4,
-          message: `Загружаю пакет ${project.title}…`,
+          message: `Downloading package ${project.title}…`,
           received,
           total,
         }),
@@ -164,12 +164,12 @@ class ModpackService {
     onProgress?.({
       stage: "pack",
       progress: 11,
-      message: "Читаю манифест сборки…",
+      message: "Reading the modpack manifest…",
     });
     const index = await readZipJson(packPath, "modrinth.index.json");
     if (index.formatVersion !== 1) {
       throw new Error(
-        `Версия формата Modrinth ${index.formatVersion} не поддерживается`,
+        `Modrinth format version ${index.formatVersion} is not supported`,
       );
     }
     const profile = profileFromDependencies(index.dependencies);
@@ -189,7 +189,7 @@ class ModpackService {
         onProgress?.({
           stage: "overrides",
           progress: 11 + Math.round((extracted / Math.max(count, 1)) * 9),
-          message: `Распаковываю настройки: ${current}`,
+          message: `Extracting configuration: ${current}`,
         }),
     });
     signal?.throwIfAborted();
@@ -219,7 +219,7 @@ class ModpackService {
         onProgress?.({
           stage: "content",
           progress: 20 + Math.round(Math.max(byFiles, byBytes) * 44),
-          message: `Устанавливаю моды: ${current}`,
+          message: `Installing mods: ${current}`,
           completed,
           count,
           received,
@@ -241,13 +241,13 @@ class ModpackService {
               profile.loaderVersion || ""
             }`.trim(),
       description:
-        index.summary || project?.description || "Сборка Modrinth",
+        index.summary || project?.description || "Modrinth modpack",
       color: "cyan",
       glyph: (index.name || project?.title || "MR").slice(0, 2).toUpperCase(),
       iconUrl: project?.icon_url || null,
       favorite: false,
       status: "installing",
-      lastPlayed: "Ещё не запускался",
+      lastPlayed: "Never played",
       playtimeMinutes: 0,
       modCount: files.filter((file) =>
         file.destination.toLowerCase().endsWith(".jar"),
@@ -320,7 +320,7 @@ class ModpackService {
 
   async previewProjectUpdate({ instance, onProgress, signal }) {
     if (!instance.sourceProjectId) {
-      throw new Error("Инстанс не связан с проектом Modrinth");
+      throw new Error("The instance is not linked to a Modrinth project");
     }
     const { packPath, release } = await this.downloadProjectPack(
       {
@@ -362,7 +362,7 @@ class ModpackService {
 
   async updateProject({ instance, settings, onProgress, signal }) {
     if (!instance.sourceProjectId) {
-      throw new Error("Инстанс не связан с проектом Modrinth");
+      throw new Error("The instance is not linked to a Modrinth project");
     }
     const project = await fetchJson(
       `https://api.modrinth.com/v2/project/${encodeURIComponent(

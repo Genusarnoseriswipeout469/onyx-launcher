@@ -18,7 +18,7 @@ function safeModName(value) {
     !/\.jar$/i.test(name) ||
     name.endsWith(".disabled")
   ) {
-    throw new Error("Некорректное имя мода");
+    throw new Error("Invalid mod filename");
   }
   return name;
 }
@@ -122,7 +122,7 @@ async function disableSuspectMods({
   const root = path.resolve(instancesRoot);
   const instanceDirectory = path.resolve(root, String(instanceId));
   if (!instanceDirectory.startsWith(`${root}${path.sep}`)) {
-    throw new Error("Инстанс находится вне управляемой папки");
+    throw new Error("The instance is outside the managed directory");
   }
   const modsDirectory = path.join(instanceDirectory, "mods");
   const disabled = [];

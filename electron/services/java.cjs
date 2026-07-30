@@ -78,7 +78,7 @@ class JavaService {
     onProgress?.({
       stage: "java",
       progress: 1,
-      message: `Подбираю Java ${requiredMajor}…`,
+      message: `Selecting Java ${requiredMajor}…`,
     });
     const architecture = adoptiumArchitecture();
     const operatingSystem = adoptiumOsName();
@@ -90,7 +90,7 @@ class JavaService {
       (asset) => asset.binary?.package?.link && asset.binary?.package?.name,
     );
     if (!selected) {
-      throw new Error(`Не найден готовый runtime Java ${requiredMajor}`);
+      throw new Error(`No prebuilt Java runtime was found for Java ${requiredMajor}`);
     }
 
     const runtimeDirectory = path.join(
@@ -113,7 +113,7 @@ class JavaService {
         onProgress?.({
           stage: "java",
           progress: Math.max(2, progress),
-          message: `Загружаю Java ${requiredMajor}…`,
+          message: `Downloading Java ${requiredMajor}…`,
           received,
           total,
         });
@@ -132,7 +132,7 @@ class JavaService {
         onProgress?.({
           stage: "java",
           progress: 72 + extractionProgress,
-          message: `Распаковываю Java ${requiredMajor}…`,
+          message: `Extracting Java ${requiredMajor}…`,
         });
       },
     });
@@ -142,11 +142,11 @@ class JavaService {
       (_file, name) => isJavaExecutableName(name),
       5,
     );
-    if (!executable) throw new Error("В архиве Java не найден исполняемый файл");
+    if (!executable) throw new Error("The Java archive does not contain an executable");
     onProgress?.({
       stage: "java",
       progress: 100,
-      message: `Java ${requiredMajor} готова`,
+      message: `Java ${requiredMajor} is ready`,
     });
     return executable;
   }
